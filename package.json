@@ -1,0 +1,50 @@
+{
+  "name": "react-utils",
+  "version": "0.1.0",
+  "description": "Miscellaneous React+TypeScript utilities with support for full tree-shaking.",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "pub": "npm publish"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/choksheak/react-utils.git"
+  },
+  "keywords": [
+    "chok",
+    "react",
+    "utils",
+    "typescript",
+    "library"
+  ],
+  "author": "ChokSheak Lau",
+  "license": "The Unlicense",
+  "type": "commonjs",
+  "homepage": "https://github.com/choksheak/react-utils#readme",
+  "devDependencies": {
+    "@tanstack/react-query": "^5.90.5",
+    "@types/jest": "^30.0.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "wretch": "^3.0.2",
+    "vitest": "^4.0.3"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": ">=5",
+    "react": ">=16",
+    "wretch": ">=3"
+  }
+}
