@@ -6,9 +6,9 @@ export const fetcher = wretch();
 
 /** Fetcher with default short retries. */
 export const fetcherWithRetries = wretch().middlewares([
-    retry({
-        maxAttempts: 3,
-        delayTimer: 1000,
-        retryOnNetworkError: true
-    })
+  retry({
+    maxAttempts: 3,
+    delayTimer: 1000,
+    retryOnNetworkError: true,
+  }),
 ]);
