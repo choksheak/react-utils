@@ -17,8 +17,13 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "precommit": "npm run lint && npm run tsc && npm run build && npm run test",
     "docs": "typedoc src/index.ts --out docs",
     "pub": "npm run docs && npm publish"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "lint-staged",
+    "pre-push": "npm run ft"
   },
   "repository": {
     "type": "git",
@@ -54,9 +59,11 @@
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "globals": "^16.4.0",
     "jiti": "^2.6.1",
+    "lint-staged": "^16.2.6",
     "prettier": "^3.6.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "simple-git-hooks": "^2.13.1",
     "tsup": "^8.5.0",
     "typedoc": "^0.28.14",
     "typescript": "^5.9.3",
