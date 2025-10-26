@@ -20,15 +20,16 @@
     "ci": "npm run lint && npm run tsc && npm run build && npm run test",
     "ls": "lint-staged",
     "docs": "typedoc src/index.ts --out docs",
-    "pub": "npm run docs && npm publish"
+    "pub": "npm run docs && npm publish",
+    "postinstall": "simple-git-hooks"
   },
   "simple-git-hooks": {
-    "pre-commit": "lint-staged"
+    "pre-commit": "npx lint-staged"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
       "echo Using `eslint --fix` will revert changes without printing errors!",
-      "eslint"
+      "eslint ."
     ],
     "*.{ts,tsx}": [
       "echo `tsc-files --noEmit` cannot read *.module.css files",
