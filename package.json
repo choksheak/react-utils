@@ -13,7 +13,8 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pub": "npm publish"
+    "docs": "typedoc src/index.ts --out docs",
+    "pub": "npm run docs && npm publish"
   },
   "repository": {
     "type": "git",
@@ -38,9 +39,10 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tsup": "^8.5.0",
+    "typedoc": "^0.28.14",
     "typescript": "^5.9.3",
-    "wretch": "^3.0.2",
-    "vitest": "^4.0.3"
+    "vitest": "^4.0.3",
+    "wretch": "^3.0.2"
   },
   "peerDependencies": {
     "@tanstack/react-query": ">=5",
