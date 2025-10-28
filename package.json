@@ -83,6 +83,7 @@
     "wretch": "^3.0.2"
   },
   "peerDependencies": {
+    "@choksheak/ts-utils": ">=0.2.9",
     "@tanstack/react-query": ">=5",
     "react": ">=16",
     "wretch": ">=3"
