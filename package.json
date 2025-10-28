@@ -39,6 +39,9 @@
     "ls": "lint-staged",
     "docs": "rm -rf docs && typedoc `find src -name '*.ts' ! -name '*.test.ts'` --out docs --name 'Chok’s React Utilities'",
     "gen-types": "tsc --emitDeclarationOnly --declaration",
+    "bump": "npm version patch",
+    "bump-minor": "npm version minor",
+    "bump-major": "npm version major",
     "pub": "publish.sh",
     "postinstall": "simple-git-hooks"
   },
