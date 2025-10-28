@@ -18,6 +18,14 @@ echo Add docs
 npm run docs
 cp -r docs dist
 
+echo Bump version
+npm run bump
+
 echo Publish
 cd dist
 npm publish --access=public
+
+echo Commit
+V=$(node -p "require('./package.json').version")
+git add .
+git commit -m "Release $V"
