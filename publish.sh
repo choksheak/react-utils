@@ -9,7 +9,6 @@ echo Bump version
 npm run bump
 
 echo Init dist
-npm i
 rm -rf dist
 mkdir dist
 
@@ -28,7 +27,7 @@ npm run docs
 cp -r docs dist
 
 echo Publish
-npm publish --access=public dist
+npm publish dist/ --access=public
 
 echo Commit
 V=$(node -p "require('./package.json').version")
