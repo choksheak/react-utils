@@ -37,7 +37,7 @@ export class SharedStateConfig {
 /* Shared state implementation                                          */
 /************************************************************************/
 
-type Subscriber<T> = (next: T, prev: T | undefined) => void;
+type Subscriber<T> = (next: T, prev: T) => void;
 
 type PersistenceAdapter<T> = {
   save?: (value: T) => Promise<void> | void;
@@ -48,18 +48,24 @@ class PubSubStore {
   private dataByKey = new Map<string, unknown>();
   private subscribersByKey = new Map<string, Set<Subscriber<unknown>>>();
 
-  public get<T>(key: string): T | undefined {
-    return this.dataByKey.get(key) as T | undefined;
+  // This could be undefined if T includes undefined, else it should never
+  // return undefined because the user has to always specify the default value.
+  public get<T>(key: string): T {
+    return this.dataByKey.get(key) as T;
   }
 
   public set<T>(key: string, value: T): void {
-    const prev = this.dataByKey.get(key) as T | undefined;
+    const prev = this.dataByKey.get(key) as T;
 
     // Do nothing if no change.
     if (prev === value) return;
 
     this.dataByKey.set(key, value);
     this.notify(key, value, prev);
+  }
+
+  public setNoNotify<T>(key: string, value: T): void {
+    this.dataByKey.set(key, value);
   }
 
   // Subscribe to changes of a specific key
@@ -80,7 +86,7 @@ class PubSubStore {
     };
   }
 
-  private notify<T>(key: string, next: T, prev: T | undefined): void {
+  private notify<T>(key: string, next: T, prev: T): void {
     const subscribers = this.subscribersByKey.get(key);
     if (!subscribers) return;
 
@@ -100,10 +106,10 @@ const store = new PubSubStore();
 
 export type SharedState<T> = {
   subscribe: (subscriber: () => void) => () => void;
-  getSnapshot: () => T | undefined;
+  getSnapshot: () => T;
   initDefaultValueOnce: () => Promise<void> | void;
   initDone: boolean;
-  setValue: (next: T | ((prev: T | undefined) => T)) => void;
+  setValue: (next: T | ((prev: T) => T)) => void;
 };
 
 let stateKey = 0;
@@ -143,19 +149,23 @@ export function sharedState<T>(
   }
 
   // `getSnapshot` function — must return same ref if value unchanged
-  function getSnapshot(): T | undefined {
+  function getSnapshot(): T {
     return store.get(key);
   }
 
-  function setValue(next: T | ((prev: T | undefined) => T)): void {
+  function setValue(next: T | ((prev: T) => T)): void {
     if (typeof next === "function") {
       const prev = store.get<T>(key);
-      next = (next as (p: T | undefined) => T)(prev);
+      next = (next as (p: T) => T)(prev);
     }
 
     store.set(key, next);
     void persistenceAdapter?.save?.(next);
   }
+
+  // Always set the default value first to avoid returning undefineds if that
+  // is not part of T.
+  store.setNoNotify(key, defaultValue);
 
   const state = {
     subscribe,
@@ -189,7 +199,7 @@ export function sharedState<T>(
  */
 export function useSharedState<T>(
   state: SharedState<T>,
-): [T | undefined, (next: T | ((prev: T | undefined) => T)) => void] {
+): [T, (next: T | ((prev: T) => T)) => void] {
   state.initDefaultValueOnce();
 
   const value = useSyncExternalStore(state.subscribe, state.getSnapshot);
