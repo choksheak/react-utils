@@ -10,6 +10,7 @@ npm run gen-types
 
 echo Bump version
 npm run bump
+npm i
 
 echo Copy files
 rm -rf dist
