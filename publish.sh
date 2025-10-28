@@ -24,11 +24,9 @@ npm run docs
 cp -r docs dist
 
 echo Publish
-cd dist
-npm publish --access=public
+npm publish --access=public dist
 
 echo Commit
-cd ..
 V=$(node -p "require('./package.json').version")
 git add .
 git commit -m "Release $V"
