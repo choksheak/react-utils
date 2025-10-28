@@ -22,9 +22,10 @@ import { useSyncExternalStore } from "react";
  */
 export class SharedStateConfig {
   /**
-   * Default duration for persistence expiration in milliseconds.
+   * Default duration for persistence expiration in milliseconds. Initial value
+   * is 30 days, but can be changed to anything.
    */
-  public static defaultPersistExpiryMs = MS_PER_DAY;
+  public static persistExpiryMs = MS_PER_DAY * 30;
 
   /**
    * True to load from persistence only on mount, false (default) to load in
@@ -135,7 +136,7 @@ export function sharedState<T>(
 
   // Use up to 1 persistence adapter per shared state.
   let persistenceAdapter: PersistenceAdapter<T> | undefined;
-  const expiryMs = persistExpiryMs ?? SharedStateConfig.defaultPersistExpiryMs;
+  const expiryMs = persistExpiryMs ?? SharedStateConfig.persistExpiryMs;
 
   if (localStorageKey) {
     persistenceAdapter = new LocalStorageAdapter<T>(localStorageKey, expiryMs);
