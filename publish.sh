@@ -2,16 +2,18 @@
 
 cd $(dirname "$0")
 
-echo Bump version
-npm run bump
-
 echo CI
 npm run ci
 
 echo Generate types
 npm run gen-types
 
+echo Bump version
+npm run bump
+
 echo Copy files
+rm -rf dist
+mkdir dist
 cp -r package.json LICENSE README.md src dist
 
 echo Remove test files
