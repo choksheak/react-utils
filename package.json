@@ -1,7 +1,9 @@
 {
-  "name": "react-utils",
+  "name": "@choksheak/react-utils",
+  "license": "The Unlicense",
   "version": "0.1.0",
   "description": "Miscellaneous React+TypeScript utilities with support for full tree-shaking.",
+  "private": false,
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -13,14 +15,14 @@
     "fix": "eslint . --fix",
     "tsc": "tsc --noEmit",
     "ft": "npm run fix && npm run tsc",
-    "build": "tsup",
-    "dev": "tsup --watch",
+    "build": "tsup src/*",
     "test": "vitest run",
     "test:watch": "vitest",
     "ci": "npm run lint && npm run tsc && npm run build && npm run test",
     "ls": "lint-staged",
-    "docs": "typedoc src/index.ts --out docs",
-    "pub": "npm run docs && npm publish",
+    "docs": "rm -rf docs && typedoc `find src -name '*.ts' ! -name '*.test.ts'` --out docs --name 'Chok’s React Utilities'",
+    "gen-types": "tsc --emitDeclarationOnly --declaration",
+    "pub": "publish.sh",
     "postinstall": "simple-git-hooks"
   },
   "simple-git-hooks": {
@@ -48,7 +50,6 @@
     "library"
   ],
   "author": "ChokSheak Lau",
-  "license": "The Unlicense",
   "type": "commonjs",
   "homepage": "https://github.com/choksheak/react-utils#readme",
   "devDependencies": {
