@@ -19,6 +19,7 @@ export type QueryStateValue<TResult> = {
 
 export type UseQueryResult<TResult> = QueryStateValue<TResult> & {
   refetch: () => Promise<TResult>;
+  setData: (data: TResult, dataUpdatedMs?: number) => void;
 };
 
 /**
@@ -106,7 +107,7 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
     const promise = this.fetchFn(...args)
       .then((result) => {
         console.log(`Successfully fetched ${queryKey}`);
-        this.setData(queryKey, result);
+        this.setData(queryKey, result, Date.now());
         return result;
       })
       .catch((e) => {
@@ -148,11 +149,15 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
     return await this.fetchNoCaching(queryKey, ...args);
   }
 
-  private async setData(queryKey: string, data: TResult): Promise<void> {
+  public async setData(
+    queryKey: string,
+    data: TResult,
+    dataUpdatedMs = Date.now(),
+  ): Promise<void> {
     const entry: QueryStateValue<TResult> = {
       loading: false,
       data,
-      dataUpdatedMs: Date.now(),
+      dataUpdatedMs,
     };
 
     this.queryState.setValue((prev) => ({ ...prev, [queryKey]: entry }));
@@ -301,6 +306,9 @@ export function useSharedQuery<TArgs extends unknown[], TResult>(
       ...state,
       refetch: () => {
         return query.updateFromSource(...args);
+      },
+      setData: (data: TResult, dataUpdatedMs?: number) => {
+        query.setData(queryKey, data, dataUpdatedMs ?? Date.now());
       },
     };
   }, [query, queryKey, queryState]);
