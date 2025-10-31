@@ -12,7 +12,6 @@ export type FetchFn<TArgs extends unknown[], TResult> = (
 export type FetchedData<TResult> = {
   value: TResult;
   updatedMs: number;
-  expiryMs: number;
 };
 
 export type QueryStateValue<TResult> = {
@@ -78,14 +77,17 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
   }
 
   private isStale(entry: FetchedData<TResult>): boolean {
-    if (this.staleMs === 0) return false; // never stale
-    const age = Date.now() - entry.updatedMs;
-    return age > this.staleMs;
+    if (this.staleMs === 0) return true; // always stale
+
+    const ageMs = Date.now() - entry.updatedMs;
+    return ageMs > this.staleMs;
   }
 
   private isExpired(entry: FetchedData<TResult>): boolean {
-    if (entry.expiryMs === 0) return false; // never expire
-    return Date.now() > entry.expiryMs;
+    if (this.expiryMs === 0) return false; // never expire
+
+    const ageMs = Date.now() - entry.updatedMs;
+    return ageMs > this.expiryMs;
   }
 
   private fetchNoCaching(queryKey: string, ...args: TArgs): Promise<TResult> {
@@ -146,13 +148,11 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
   }
 
   private async setCache(queryKey: string, value: TResult): Promise<void> {
-    const data: FetchedData<TResult> = {
-      value,
-      updatedMs: Date.now(),
-      expiryMs: this.expiryMs ? Date.now() + this.expiryMs : 0,
+    const entry: QueryStateValue<TResult> = {
+      data: { value, updatedMs: Date.now() },
+      loading: false,
+      error: null,
     };
-
-    const entry = { data, loading: false, error: null };
 
     this.queryState.setValue((prev) => ({ ...prev, [queryKey]: entry }));
   }
@@ -212,7 +212,7 @@ export function sharedQuery<TArgs extends unknown[], TResult>(
 
 const DEFAULT_QUERY_STATE_ENTRY: QueryStateValue<unknown> = {
   data: null,
-  loading: false,
+  loading: true,
   error: null,
 };
 
@@ -241,7 +241,7 @@ export function useQuery<TArgs extends unknown[], TResult>(
     setQueryState((prev) => {
       const clone = { ...prev };
       clone[queryKey] = {
-        ...(clone[queryKey] ?? { data: null }),
+        data: clone[queryKey]?.data ?? null,
         loading: true,
         error: null,
       };
@@ -254,11 +254,11 @@ export function useQuery<TArgs extends unknown[], TResult>(
       if (isMounted.current) {
         setQueryState((prev) => {
           const clone = { ...prev };
+          const now = Date.now();
           clone[queryKey] = {
             data: {
               value,
-              updatedMs: Date.now(),
-              expiryMs: query.expiryMs,
+              updatedMs: now,
             },
             loading: false,
             error: null,
@@ -276,7 +276,7 @@ export function useQuery<TArgs extends unknown[], TResult>(
         setQueryState((prev) => {
           const clone = { ...prev };
           clone[queryKey] = {
-            ...(clone[queryKey] ?? { data: null }),
+            data: clone[queryKey]?.data ?? null,
             loading: false,
             error,
           };
