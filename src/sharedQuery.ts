@@ -1,5 +1,5 @@
 import { DEFAULT_EXPIRY_DELTA_MS } from "@choksheak/ts-utils/kvStore";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { SharedState, sharedState, useSharedState } from "./sharedState";
 import { StorageOptions } from "./utils/storage";
@@ -9,15 +9,16 @@ export type FetchFn<TArgs extends unknown[], TResult> = (
   ...args: TArgs
 ) => Promise<TResult>;
 
-export type FetchedData<TResult> = {
-  value: TResult;
-  updatedMs: number;
+export type QueryStateValue<TResult> = {
+  loading: boolean;
+  data?: TResult;
+  dataUpdatedMs?: number;
+  error?: Error;
+  errorUpdatedMs?: number;
 };
 
-export type QueryStateValue<TResult> = {
-  data: FetchedData<TResult> | null;
-  loading: boolean;
-  error: Error | null;
+export type UseQueryResult<TResult> = QueryStateValue<TResult> & {
+  refetch: () => Promise<TResult>;
 };
 
 /**
@@ -76,17 +77,17 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
     return this.queryName + ":" + stringifyDeterministicForKeys(args);
   }
 
-  private isStale(entry: FetchedData<TResult>): boolean {
+  private isStale(dataUpdatedMs: number): boolean {
     if (this.staleMs === 0) return true; // always stale
 
-    const ageMs = Date.now() - entry.updatedMs;
+    const ageMs = Date.now() - dataUpdatedMs;
     return ageMs > this.staleMs;
   }
 
-  private isExpired(entry: FetchedData<TResult>): boolean {
+  private isExpired(dataUpdatedMs: number): boolean {
     if (this.expiryMs === 0) return false; // never expire
 
-    const ageMs = Date.now() - entry.updatedMs;
+    const ageMs = Date.now() - dataUpdatedMs;
     return ageMs > this.expiryMs;
   }
 
@@ -105,7 +106,7 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
     const promise = this.fetchFn(...args)
       .then((result) => {
         console.log(`Successfully fetched ${queryKey}`);
-        this.setCache(queryKey, result);
+        this.setData(queryKey, result);
         return result;
       })
       .catch((e) => {
@@ -124,13 +125,13 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
     const queryKey = this.getQueryKey(args);
     const cached = this.queryState.getSnapshot()?.[queryKey];
 
-    if (cached?.data && !this.isExpired(cached.data)) {
+    if (cached?.data && !this.isExpired(cached.dataUpdatedMs ?? 0)) {
       // Return cached value if not stale.
-      if (!this.isStale(cached.data)) {
+      if (!this.isStale(cached.dataUpdatedMs ?? 0)) {
         console.log(
           `Return fresh data ${queryKey} from cache without fetching`,
         );
-        return cached.data.value;
+        return cached.data;
       }
 
       // If stale, optionally update the data in the background.
@@ -141,17 +142,17 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
 
       // Still return stale data immediately.
       console.log(`Returning stale data for ${queryKey}`);
-      return cached.data.value;
+      return cached.data;
     }
 
     return await this.fetchNoCaching(queryKey, ...args);
   }
 
-  private async setCache(queryKey: string, value: TResult): Promise<void> {
+  private async setData(queryKey: string, data: TResult): Promise<void> {
     const entry: QueryStateValue<TResult> = {
-      data: { value, updatedMs: Date.now() },
       loading: false,
-      error: null,
+      data,
+      dataUpdatedMs: Date.now(),
     };
 
     this.queryState.setValue((prev) => ({ ...prev, [queryKey]: entry }));
@@ -210,21 +211,18 @@ export function sharedQuery<TArgs extends unknown[], TResult>(
   return new SharedQuery(queryName, fetchFn, options);
 }
 
-const DEFAULT_QUERY_STATE_ENTRY: QueryStateValue<unknown> = {
-  data: null,
-  loading: true,
-  error: null,
-};
+const DEFAULT_QUERY_STATE_ENTRY: QueryStateValue<unknown> = { loading: true };
 
 /**
  * React hook to make use of a shared query inside any React component.
  *
- *     const users = useQuery(usersQuery, { userId: "123" });
+ *     const users = useSharedQuery(usersQuery, ["123"]);
  */
-export function useQuery<TArgs extends unknown[], TResult>(
+export function useSharedQuery<TArgs extends unknown[], TResult>(
   query: SharedQuery<TArgs, TResult>,
-  args: TArgs,
-): QueryStateValue<TResult> {
+  // Default to use no arguments.
+  args: TArgs = [] as unknown as TArgs,
+): UseQueryResult<TResult> {
   const [queryState, setQueryState] = useSharedState(query.queryState);
 
   const isMounted = useRef(true);
@@ -241,27 +239,23 @@ export function useQuery<TArgs extends unknown[], TResult>(
     setQueryState((prev) => {
       const clone = { ...prev };
       clone[queryKey] = {
-        data: clone[queryKey]?.data ?? null,
+        ...(clone[queryKey] ?? {}),
         loading: true,
-        error: null,
       };
       return clone;
     });
 
     try {
-      const value = await query.getCachedOrFetch(...args);
+      const data = await query.getCachedOrFetch(...args);
 
       if (isMounted.current) {
         setQueryState((prev) => {
           const clone = { ...prev };
-          const now = Date.now();
           clone[queryKey] = {
-            data: {
-              value,
-              updatedMs: now,
-            },
+            // Don't keep old error.
             loading: false,
-            error: null,
+            data,
+            dataUpdatedMs: Date.now(),
           };
           return clone;
         });
@@ -276,9 +270,11 @@ export function useQuery<TArgs extends unknown[], TResult>(
         setQueryState((prev) => {
           const clone = { ...prev };
           clone[queryKey] = {
-            data: clone[queryKey]?.data ?? null,
+            // Keep old data.
+            ...(clone[queryKey] ?? {}),
             loading: false,
             error,
+            errorUpdatedMs: Date.now(),
           };
           return clone;
         });
@@ -296,8 +292,16 @@ export function useQuery<TArgs extends unknown[], TResult>(
     };
   }, [execute]);
 
-  return (
-    queryState[queryKey] ??
-    (DEFAULT_QUERY_STATE_ENTRY as QueryStateValue<TResult>)
-  );
+  return useMemo(() => {
+    const state =
+      queryState[queryKey] ??
+      (DEFAULT_QUERY_STATE_ENTRY as QueryStateValue<TResult>);
+
+    return {
+      ...state,
+      refetch: () => {
+        return query.updateFromSource(...args);
+      },
+    };
+  }, [query, queryKey, queryState]);
 }
