@@ -5,54 +5,51 @@ import { SharedState, sharedState, useSharedState } from "./sharedState";
 import { StorageOptions } from "./utils/storage";
 import { stringifyDeterministicForKeys } from "./utils/stringify";
 
-export type FetchFn<TArgs extends unknown[], TResult> = (
+export type FetchFn<TArgs extends unknown[], TData> = (
   ...args: TArgs
-) => Promise<TResult>;
+) => Promise<TData>;
 
-export type QueryStateValue<TResult> = {
+export type QueryStateValue<TData> = {
   loading: boolean;
-  data?: TResult;
+  data?: TData;
   dataUpdatedMs?: number;
   error?: Error;
   errorUpdatedMs?: number;
 };
 
-export type UseQueryResult<TResult> = QueryStateValue<TResult> & {
-  refetch: () => Promise<TResult>;
-  setData: (data: TResult, dataUpdatedMs?: number) => void;
+export type UseQueryResult<TData> = QueryStateValue<TData> & {
+  refetch: () => Promise<TData>;
+  setData: (data: TData, dataUpdatedMs?: number) => void;
 };
 
 /**
- * The full query state is a record of all the fetch results mapped by
+ * The full query state is a record of all the fetch states mapped by
  * query key to the state entry.
  */
-export type SharedQueryState<TResult> = Record<
-  string,
-  QueryStateValue<TResult>
->;
+export type SharedQueryState<TData> = Record<string, QueryStateValue<TData>>;
 
-export type SharedQueryOptions<TResult> = {
+export type SharedQueryOptions<TData> = {
   // ms before data considered stale; 0 means never stale.
   staleMs?: number;
   // ms before data is removed from cache; 0 means never expire.
   expiryMs?: number;
   // Trigger background re-fetch if stale.
   revalidateOnStale?: boolean;
-} & StorageOptions<SharedQueryState<TResult>>;
+} & StorageOptions<SharedQueryState<TData>>;
 
 const DEFAULT_STALE_MS = 0;
 
-export class SharedQuery<TArgs extends unknown[], TResult> {
-  private readonly inflightPromises = new Map<string, Promise<TResult>>();
-  public readonly queryState: SharedState<SharedQueryState<TResult>>;
+export class SharedQuery<TArgs extends unknown[], TData> {
+  private readonly inflightPromises = new Map<string, Promise<TData>>();
+  public readonly queryState: SharedState<SharedQueryState<TData>>;
   public readonly expiryMs: number;
   public readonly staleMs: number;
   public readonly revalidateOnStale: boolean;
 
   public constructor(
     public readonly queryName: string,
-    private readonly fetchFn: FetchFn<TArgs, TResult>,
-    options?: SharedQueryOptions<TResult>,
+    private readonly fetchFn: FetchFn<TArgs, TData>,
+    options?: SharedQueryOptions<TData>,
   ) {
     this.expiryMs =
       options?.expiryMs !== undefined
@@ -64,7 +61,7 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
 
     this.revalidateOnStale = Boolean(options?.revalidateOnStale);
 
-    this.queryState = sharedState<SharedQueryState<TResult>>(
+    this.queryState = sharedState<SharedQueryState<TData>>(
       {},
       {
         ...options,
@@ -92,7 +89,7 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
     return ageMs > this.expiryMs;
   }
 
-  private fetchNoCaching(queryKey: string, ...args: TArgs): Promise<TResult> {
+  private fetchNoCaching(queryKey: string, ...args: TArgs): Promise<TData> {
     const inflightPromise = this.inflightPromises.get(queryKey);
 
     // De-duplicate in-flight requests
@@ -105,10 +102,10 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
     console.log(`Start fetching ${queryKey}`);
 
     const promise = this.fetchFn(...args)
-      .then((result) => {
+      .then((data) => {
         console.log(`Successfully fetched ${queryKey}`);
-        this.setData(queryKey, result, Date.now());
-        return result;
+        this.setData(queryKey, data, Date.now());
+        return data;
       })
       .catch((e) => {
         console.error(`Failed to fetch ${queryKey}: ${e}`);
@@ -122,7 +119,7 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
     return promise;
   }
 
-  public async getCachedOrFetch(...args: TArgs): Promise<TResult> {
+  public async getCachedOrFetch(...args: TArgs): Promise<TData> {
     const queryKey = this.getQueryKey(args);
     const cached = this.queryState.getSnapshot()?.[queryKey];
 
@@ -149,12 +146,13 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
     return await this.fetchNoCaching(queryKey, ...args);
   }
 
+  /** Set the data directly if the user obtained it from somewhere else. */
   public async setData(
     queryKey: string,
-    data: TResult,
+    data: TData,
     dataUpdatedMs = Date.now(),
   ): Promise<void> {
-    const entry: QueryStateValue<TResult> = {
+    const entry: QueryStateValue<TData> = {
       loading: false,
       data,
       dataUpdatedMs,
@@ -164,7 +162,7 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
   }
 
   /** Do a new fetch even when the data is already cached. */
-  public async updateFromSource(...args: TArgs): Promise<TResult> {
+  public async updateFromSource(...args: TArgs): Promise<TData> {
     const key = this.getQueryKey(args);
     return await this.fetchNoCaching(key, ...args);
   }
@@ -201,13 +199,13 @@ const seenQueryNames = new Set<string>();
  * Each `queryName` must be unique, and can only be declared once, most often
  * in the top level scope. The queryName is used for logging only.
  */
-export function sharedQuery<TArgs extends unknown[], TResult>(
+export function sharedQuery<TArgs extends unknown[], TData>(
   // The name could have been auto-generated, but we let the user give us a
   // human-readable name that can be identified quickly in the logs.
   queryName: string,
-  fetchFn: FetchFn<TArgs, TResult>,
-  options?: SharedQueryOptions<TResult>,
-): SharedQuery<TArgs, TResult> {
+  fetchFn: FetchFn<TArgs, TData>,
+  options?: SharedQueryOptions<TData>,
+): SharedQuery<TArgs, TData> {
   if (seenQueryNames.has(queryName)) {
     throw new Error(`Duplicate shared query "${queryName}"`);
   }
@@ -223,11 +221,11 @@ const DEFAULT_QUERY_STATE_ENTRY: QueryStateValue<unknown> = { loading: true };
  *
  *     const users = useSharedQuery(usersQuery, ["123"]);
  */
-export function useSharedQuery<TArgs extends unknown[], TResult>(
-  query: SharedQuery<TArgs, TResult>,
+export function useSharedQuery<TArgs extends unknown[], TData>(
+  query: SharedQuery<TArgs, TData>,
   // Default to use no arguments.
   args: TArgs = [] as unknown as TArgs,
-): UseQueryResult<TResult> {
+): UseQueryResult<TData> {
   const [queryState, setQueryState] = useSharedState(query.queryState);
 
   const isMounted = useRef(true);
@@ -300,14 +298,14 @@ export function useSharedQuery<TArgs extends unknown[], TResult>(
   return useMemo(() => {
     const state =
       queryState[queryKey] ??
-      (DEFAULT_QUERY_STATE_ENTRY as QueryStateValue<TResult>);
+      (DEFAULT_QUERY_STATE_ENTRY as QueryStateValue<TData>);
 
     return {
       ...state,
       refetch: () => {
         return query.updateFromSource(...args);
       },
-      setData: (data: TResult, dataUpdatedMs?: number) => {
+      setData: (data: TData, dataUpdatedMs?: number) => {
         query.setData(queryKey, data, dataUpdatedMs ?? Date.now());
       },
     };
