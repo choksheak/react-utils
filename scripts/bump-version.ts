@@ -8,7 +8,7 @@ const bumpType =
     .find((a) => ["--major", "--minor", "--patch"].includes(a))
     ?.replace("--", "") || "patch";
 
-const pkgPath = path.resolve(process.cwd(), "..", "package.json");
+const pkgPath = path.resolve(process.cwd(), "package.json");
 
 // Read and parse package.json
 if (!fs.existsSync(pkgPath)) {
