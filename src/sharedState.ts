@@ -205,10 +205,10 @@ export function useSharedState<T>(
   state.initDefaultValueOnce();
 
   const value = useSyncExternalStore(
-    state.subscribe,
-    state.getSnapshot,
+    (onStoreChange) => state.subscribe(onStoreChange),
+    () => state.getSnapshot(),
     // getServerSnapshot is needed to prevent SSR dev errors in nextjs.
-    state.getSnapshot,
+    () => state.getSnapshot(),
   );
 
   return [value, state.setValue];
