@@ -121,6 +121,7 @@ let stateKey = 0;
 export class SharedState<T> {
   private readonly pubSubKey: string;
   private readonly storageAdapter: StorageAdapter<T> | null;
+  public readonly setValueBounded: (next: T | ((prev: T) => T)) => void;
   public initDone = false;
 
   public constructor(
@@ -131,6 +132,9 @@ export class SharedState<T> {
 
     // Use max of 1 storage adapter per shared state.
     this.storageAdapter = getStorageAdapter(options, DEFAULT_EXPIRY_DELTA_MS);
+
+    // Same as this.setValue, but binding the `this` reference.
+    this.setValueBounded = (arg) => this.setValue(arg);
 
     // Always set the default value first to avoid returning undefineds if that
     // is not part of T.
@@ -211,7 +215,7 @@ export function useSharedState<T>(
     () => state.getSnapshot(),
   );
 
-  return [value, state.setValue];
+  return [value, state.setValueBounded];
 }
 
 /** E.g. const my = useSharedStateValue(myState) */
