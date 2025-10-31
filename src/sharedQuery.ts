@@ -88,62 +88,64 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
     return Date.now() > entry.expiryMs;
   }
 
-  private fetchNoCaching(key: string, ...args: TArgs): Promise<TResult> {
-    const inflightPromise = this.inflightPromises.get(key);
+  private fetchNoCaching(queryKey: string, ...args: TArgs): Promise<TResult> {
+    const inflightPromise = this.inflightPromises.get(queryKey);
 
     // De-duplicate in-flight requests
     if (inflightPromise) {
-      console.log(`Deduplicating inflight fetch for ${key}`);
+      console.log(`Deduplicating inflight fetch for ${queryKey}`);
       return inflightPromise;
     }
 
     // Fetch new data
-    console.log(`Start fetching ${key}`);
+    console.log(`Start fetching ${queryKey}`);
 
     const promise = this.fetchFn(...args)
       .then((result) => {
-        console.log(`Successfully fetched ${key}`);
-        this.setCache(key, result);
+        console.log(`Successfully fetched ${queryKey}`);
+        this.setCache(queryKey, result);
         return result;
       })
       .catch((e) => {
-        console.error(`Failed to fetch ${key}: ${e}`);
+        console.error(`Failed to fetch ${queryKey}: ${e}`);
         throw e;
       })
       .finally(() => {
-        this.inflightPromises.delete(key);
+        this.inflightPromises.delete(queryKey);
       });
 
-    this.inflightPromises.set(key, promise);
+    this.inflightPromises.set(queryKey, promise);
     return promise;
   }
 
   public async getCachedOrFetch(...args: TArgs): Promise<TResult> {
-    const key = this.getQueryKey(args);
-    const cached = this.queryState.getSnapshot()?.[key];
+    const queryKey = this.getQueryKey(args);
+    const cached = this.queryState.getSnapshot()?.[queryKey];
 
     if (cached?.data && !this.isExpired(cached.data)) {
       // Return cached value if not stale.
       if (!this.isStale(cached.data)) {
-        console.log(`Return fresh data ${key} from cache without fetching`);
+        console.log(
+          `Return fresh data ${queryKey} from cache without fetching`,
+        );
         return cached.data.value;
       }
 
       // If stale, optionally update the data in the background.
       if (this.revalidateOnStale) {
-        console.log(`revalidateOnStale for ${key}`);
-        void this.fetchNoCaching(key, ...args);
+        console.log(`revalidateOnStale for ${queryKey}`);
+        void this.fetchNoCaching(queryKey, ...args);
       }
 
       // Still return stale data immediately.
-      console.log(`Returning stale data for ${key}`);
+      console.log(`Returning stale data for ${queryKey}`);
       return cached.data.value;
     }
 
-    return await this.fetchNoCaching(key, ...args);
+    return await this.fetchNoCaching(queryKey, ...args);
   }
 
-  private async setCache(key: string, value: TResult): Promise<void> {
+  private async setCache(queryKey: string, value: TResult): Promise<void> {
     const data: FetchedData<TResult> = {
       value,
       updatedMs: Date.now(),
@@ -152,7 +154,7 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
 
     const entry = { data, loading: false, error: null };
 
-    this.queryState.setValue((prev) => ({ ...prev, [key]: entry }));
+    this.queryState.setValue((prev) => ({ ...prev, [queryKey]: entry }));
   }
 
   /** Do a new fetch even when the data is already cached. */
@@ -214,6 +216,11 @@ const DEFAULT_QUERY_STATE_ENTRY: QueryStateValue<unknown> = {
   error: null,
 };
 
+/**
+ * React hook to make use of a shared query inside any React component.
+ *
+ *     const users = useQuery(usersQuery, { userId: "123" });
+ */
 export function useQuery<TArgs extends unknown[], TResult>(
   query: SharedQuery<TArgs, TResult>,
   args: TArgs,
@@ -229,6 +236,8 @@ export function useQuery<TArgs extends unknown[], TResult>(
 
   // The fetch logic wrapped in useCallback to be stable for useEffect
   const execute = useCallback(async () => {
+    console.log(`Begin executing shared query ${queryKey}`);
+
     setQueryState((prev) => {
       const clone = { ...prev };
       clone[queryKey] = {
