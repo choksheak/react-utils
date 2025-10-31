@@ -31,9 +31,12 @@ export type SharedQueryState<TResult> = Record<
 >;
 
 export type SharedQueryOptions<TResult> = {
-  staleMs?: number; // ms before data considered stale
-  expiryMs?: number; // ms before data is removed from cache
-  revalidateOnStale?: boolean; // trigger background re-fetch if stale
+  // ms before data considered stale; 0 means never stale.
+  staleMs?: number;
+  // ms before data is removed from cache; 0 means never expire.
+  expiryMs?: number;
+  // Trigger background re-fetch if stale.
+  revalidateOnStale?: boolean;
 } & StorageOptions<SharedQueryState<TResult>>;
 
 const DEFAULT_STALE_MS = 0;
@@ -41,20 +44,31 @@ const DEFAULT_STALE_MS = 0;
 export class SharedQuery<TArgs extends unknown[], TResult> {
   private readonly inflightPromises = new Map<string, Promise<TResult>>();
   public readonly queryState: SharedState<SharedQueryState<TResult>>;
+  public readonly expiryMs: number;
+  public readonly staleMs: number;
+  public readonly revalidateOnStale: boolean;
 
   public constructor(
     public readonly queryName: string,
     private readonly fetchFn: FetchFn<TArgs, TResult>,
-    public readonly options?: SharedQueryOptions<TResult>,
+    options?: SharedQueryOptions<TResult>,
   ) {
-    const expiryMs = this.options?.expiryMs || DEFAULT_EXPIRY_DELTA_MS;
+    this.expiryMs =
+      options?.expiryMs !== undefined
+        ? options?.expiryMs
+        : DEFAULT_EXPIRY_DELTA_MS;
+
+    this.staleMs =
+      options?.staleMs !== undefined ? options?.staleMs : DEFAULT_STALE_MS;
+
+    this.revalidateOnStale = Boolean(options?.revalidateOnStale);
 
     this.queryState = sharedState<SharedQueryState<TResult>>(
       {},
       {
         ...options,
         // Fallback to use expiryMs for the storeExpiryMs.
-        storeExpiryMs: options?.storeExpiryMs || expiryMs,
+        storeExpiryMs: options?.storeExpiryMs || this.expiryMs,
       },
     );
   }
@@ -64,11 +78,13 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
   }
 
   private isStale(entry: FetchedData<TResult>): boolean {
+    if (this.staleMs === 0) return false; // never stale
     const age = Date.now() - entry.updatedMs;
-    return age > (this.options?.staleMs ?? DEFAULT_STALE_MS);
+    return age > this.staleMs;
   }
 
   private isExpired(entry: FetchedData<TResult>): boolean {
+    if (entry.expiryMs === 0) return false; // never expire
     return Date.now() > entry.expiryMs;
   }
 
@@ -114,7 +130,7 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
       }
 
       // If stale, optionally update the data in the background.
-      if (this.options?.revalidateOnStale) {
+      if (this.revalidateOnStale) {
         console.log(`revalidateOnStale for ${key}`);
         void this.fetchNoCaching(key, ...args);
       }
@@ -128,12 +144,10 @@ export class SharedQuery<TArgs extends unknown[], TResult> {
   }
 
   private async setCache(key: string, value: TResult): Promise<void> {
-    const expiryMs = this.options?.expiryMs ?? DEFAULT_EXPIRY_DELTA_MS;
-
     const data: FetchedData<TResult> = {
       value,
       updatedMs: Date.now(),
-      expiryMs: Date.now() + expiryMs,
+      expiryMs: this.expiryMs ? Date.now() + this.expiryMs : 0,
     };
 
     const entry = { data, loading: false, error: null };
@@ -235,10 +249,7 @@ export function useQuery<TArgs extends unknown[], TResult>(
             data: {
               value,
               updatedMs: Date.now(),
-              expiryMs:
-                query.options?.expiryMs !== undefined
-                  ? query.options?.expiryMs
-                  : DEFAULT_EXPIRY_DELTA_MS,
+              expiryMs: query.expiryMs,
             },
             loading: false,
             error: null,
