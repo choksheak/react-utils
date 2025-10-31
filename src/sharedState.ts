@@ -2,7 +2,11 @@ import { DEFAULT_EXPIRY_DELTA_MS } from "@choksheak/ts-utils/kvStore";
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
 import { useSyncExternalStore } from "react";
 
-import { getStorageAdapter, StorageOptions } from "./utils/storage";
+import {
+  getStorageAdapter,
+  StorageAdapter,
+  StorageOptions,
+} from "./utils/storage";
 
 /**
  * The "shared state" is a React state that shares the same value across the
@@ -62,6 +66,10 @@ class PubSubStore {
     this.notify(key, value, prev);
   }
 
+  public delete(key: string): void {
+    this.dataByKey.delete(key);
+  }
+
   public setNoNotify<T>(key: string, value: T): void {
     this.dataByKey.set(key, value);
   }
@@ -108,16 +116,72 @@ export type SharedStateOptions<T> = {
   lazyLoad?: boolean;
 } & StorageOptions<T>;
 
-export type SharedState<T> = {
-  subscribe: (subscriber: () => void) => () => void;
-  getSnapshot: () => T;
-  initDefaultValueOnce: () => Promise<void> | void;
-  initDone: boolean;
-  setValue: (next: T | ((prev: T) => T)) => void;
-  delete: () => void;
-};
-
 let stateKey = 0;
+
+export class SharedState<T> {
+  private readonly pubSubKey: string;
+  private readonly storageAdapter: StorageAdapter<T> | null;
+  public initDone = false;
+
+  public constructor(
+    private readonly defaultValue: T,
+    options?: SharedStateOptions<T>,
+  ) {
+    this.pubSubKey = String(stateKey++);
+
+    // Use max of 1 storage adapter per shared state.
+    this.storageAdapter = getStorageAdapter(options, DEFAULT_EXPIRY_DELTA_MS);
+
+    // Always set the default value first to avoid returning undefineds if that
+    // is not part of T.
+    pubSubStore.setNoNotify(this.pubSubKey, defaultValue);
+
+    const lazyLoad = options?.lazyLoad;
+    const lazy = lazyLoad !== undefined ? lazyLoad : SharedStateConfig.lazyLoad;
+
+    if (!lazy) {
+      void this.initDefaultValueOnce();
+    }
+  }
+
+  // `subscribe` function required by useSyncExternalStore
+  public subscribe(subscriber: () => void): () => void {
+    return pubSubStore.subscribe(this.pubSubKey, () => subscriber());
+  }
+
+  // Get the value of the shared state.
+  // `getSnapshot` function — must return same ref if value unchanged
+  public getSnapshot(): T {
+    return pubSubStore.get(this.pubSubKey);
+  }
+
+  // Set the value of the shared state.
+  public setValue(next: T | ((prev: T) => T)): void {
+    if (typeof next === "function") {
+      const prev = pubSubStore.get<T>(this.pubSubKey);
+      next = (next as (p: T) => T)(prev);
+    }
+
+    pubSubStore.set(this.pubSubKey, next);
+    void this.storageAdapter?.save(STORAGE_KEY, next);
+  }
+
+  // Remove the value of the shared state. Actually this just sets the value
+  // back to the given default value.
+  public delete() {
+    pubSubStore.set(this.pubSubKey, this.defaultValue);
+    void this.storageAdapter?.save(STORAGE_KEY, this.defaultValue);
+  }
+
+  // Initial default handling
+  public async initDefaultValueOnce() {
+    if (this.initDone) return;
+    this.initDone = true;
+
+    const v = await this.storageAdapter?.load(STORAGE_KEY);
+    pubSubStore.set(this.pubSubKey, v !== undefined ? v : this.defaultValue);
+  }
+}
 
 /**
  * Create a new shared state object. Put this code at the top level scope:
@@ -128,63 +192,7 @@ export function sharedState<T>(
   defaultValue: T,
   options?: SharedStateOptions<T>,
 ): SharedState<T> {
-  const key = String(stateKey++);
-
-  // Use up to 1 storage adapter per shared state.
-  const storageAdapter = getStorageAdapter(options, DEFAULT_EXPIRY_DELTA_MS);
-
-  // `subscribe` function required by useSyncExternalStore
-  function subscribe(subscriber: () => void): () => void {
-    return pubSubStore.subscribe(key, () => subscriber());
-  }
-
-  // `getSnapshot` function — must return same ref if value unchanged
-  function getSnapshot(): T {
-    return pubSubStore.get(key);
-  }
-
-  function setValue(next: T | ((prev: T) => T)): void {
-    if (typeof next === "function") {
-      const prev = pubSubStore.get<T>(key);
-      next = (next as (p: T) => T)(prev);
-    }
-
-    pubSubStore.set(key, next);
-    void storageAdapter?.save(STORAGE_KEY, next);
-  }
-
-  // Always set the default value first to avoid returning undefineds if that
-  // is not part of T.
-  pubSubStore.setNoNotify(key, defaultValue);
-
-  const state = {
-    subscribe,
-    getSnapshot,
-
-    // initial default handling
-    initDefaultValueOnce: async () => {
-      if (state.initDone) return;
-      state.initDone = true;
-
-      const v = await storageAdapter?.load(STORAGE_KEY);
-      pubSubStore.set(key, v !== undefined ? v : defaultValue);
-    },
-    initDone: false,
-
-    setValue,
-    delete: () => {
-      void storageAdapter?.delete(STORAGE_KEY);
-    },
-  };
-
-  const lazyLoad = options?.lazyLoad;
-  const lazy = lazyLoad !== undefined ? lazyLoad : SharedStateConfig.lazyLoad;
-
-  if (!lazy) {
-    void state.initDefaultValueOnce();
-  }
-
-  return state;
+  return new SharedState(defaultValue, options);
 }
 
 /**
