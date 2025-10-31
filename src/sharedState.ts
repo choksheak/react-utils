@@ -114,6 +114,7 @@ export type SharedState<T> = {
   initDefaultValueOnce: () => Promise<void> | void;
   initDone: boolean;
   setValue: (next: T | ((prev: T) => T)) => void;
+  delete: () => void;
 };
 
 let stateKey = 0;
@@ -171,6 +172,9 @@ export function sharedState<T>(
     initDone: false,
 
     setValue,
+    delete: () => {
+      void storageAdapter?.delete(STORAGE_KEY);
+    },
   };
 
   const lazyLoad = options?.lazyLoad;

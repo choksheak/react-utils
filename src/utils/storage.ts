@@ -103,7 +103,7 @@ export class LocalStorageAdapter<T> implements StorageAdapter<T> {
       fullKey,
       JSON.stringify({
         value,
-        expiresAt: Date.now() + this.expiryMs,
+        expiresAt: this.expiryMs ? Date.now() + this.expiryMs : 0,
       } satisfies ValueWithExpiration<T>),
     );
   }
@@ -117,7 +117,7 @@ export class LocalStorageAdapter<T> implements StorageAdapter<T> {
 
     try {
       const box = JSON.parse(raw) as ValueWithExpiration<T>;
-      if (!box || !box?.expiresAt || Date.now() >= box.expiresAt) {
+      if (!box || (box.expiresAt && Date.now() >= box.expiresAt)) {
         window.localStorage.removeItem(fullKey);
         return undefined;
       }
