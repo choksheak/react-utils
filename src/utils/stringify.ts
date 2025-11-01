@@ -15,7 +15,7 @@ export function stringifyDeterministicForKeys(params: unknown): string {
       throw new Error(`Functions should not be passed into query parameters`);
     }
 
-    if (!value || typeof value !== "object") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
       return value;
     }
 

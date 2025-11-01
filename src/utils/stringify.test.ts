@@ -35,4 +35,12 @@ describe("stringifyDeterministicForKeys", () => {
       `Functions should not be passed into query parameters`,
     );
   });
+
+  test("array", () => {
+    const a = [1, "a", { b: 2 }, [true]];
+
+    const actual = stringifyDeterministicForKeys(a);
+
+    expect(actual).toBe(`[1,"a",{"b":2},[true]]`);
+  });
 });
