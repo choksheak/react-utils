@@ -20,6 +20,7 @@ export type QueryStateValue<TData> = {
 export type UseQueryResult<TData> = QueryStateValue<TData> & {
   refetch: () => Promise<TData>;
   setData: (data: TData, dataUpdatedMs?: number) => void;
+  deleteData: () => void;
 };
 
 /**
@@ -43,7 +44,7 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = {
   expiryMs?: number;
 
   // Trigger background re-fetch if stale.
-  revalidateOnStale?: boolean;
+  refetchOnStale?: boolean;
 } & StorageOptions<SharedQueryState<TData>>;
 
 const DEFAULT_STALE_MS = 0;
@@ -56,7 +57,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   private readonly queryFn: FetchFn<TArgs, TData>;
   public readonly expiryMs: number;
   public readonly staleMs: number;
-  public readonly revalidateOnStale: boolean;
+  public readonly refetchOnStale: boolean;
 
   public constructor(options: SharedQueryOptions<TArgs, TData>) {
     this.queryName = options.queryName;
@@ -71,7 +72,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     this.staleMs =
       options?.staleMs !== undefined ? options?.staleMs : DEFAULT_STALE_MS;
 
-    this.revalidateOnStale = Boolean(options?.revalidateOnStale);
+    this.refetchOnStale = Boolean(options?.refetchOnStale);
 
     this.queryState = sharedState<SharedQueryState<TData>>(
       {},
@@ -115,8 +116,8 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       }
 
       // If stale, optionally update the data in the background.
-      if (this.revalidateOnStale) {
-        console.log(`revalidateOnStale for ${queryKey}`);
+      if (this.refetchOnStale) {
+        console.log(`refetchOnStale for ${queryKey}`);
         void this.dedupedFetch(queryKey, ...args);
       }
 
@@ -182,24 +183,20 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     return await this.dedupedFetch(key, ...args);
   }
 
-  /** Delete the currently cached data. */
-  public invalidate(args?: TArgs): void {
-    if (args) {
-      const queryKey = this.getQueryKey(args);
+  /** Delete the cached data for one set of arguments. */
+  public deleteData(args: TArgs): void {
+    const queryKey = this.getQueryKey(args);
 
-      const record = this.queryState.getSnapshot();
-      const clone = { ...record };
-      delete clone[queryKey];
-      this.queryState.setValue(clone);
+    const record = this.queryState.getSnapshot();
+    const clone = { ...record };
+    delete clone[queryKey];
+    this.queryState.setValue(clone);
 
-      this.inflightPromises.delete(queryKey);
-    } else {
-      this.clearAll();
-    }
+    this.inflightPromises.delete(queryKey);
   }
 
-  /** Delete the currently cached data & all inflight promises. */
-  public clearAll(): void {
+  /** Delete all currently cached data & all inflight promises. */
+  public clear(): void {
     this.queryState.delete();
     this.inflightPromises.clear();
   }
@@ -320,6 +317,9 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
       },
       setData: (data: TData, dataUpdatedMs?: number) => {
         query.setData(queryKey, data, dataUpdatedMs ?? Date.now());
+      },
+      deleteData: () => {
+        query.deleteData(args);
       },
     };
   }, [query, queryKey, queryState]);
