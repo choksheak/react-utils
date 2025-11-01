@@ -237,6 +237,16 @@ const seenQueryNames = new Set<string>();
  *
  * Each `queryName` must be unique, and can only be declared once, most often
  * in the top level scope. The queryName is used for logging only.
+ *
+ * Example:
+ * ```
+ *   export const usersQuery = sharedQuery({
+ *     queryName: "users",
+ *     queryFn: listUsers,
+ *     persistTo: "indexedDb",
+ *     staleMs: MS_PER_DAY,
+ *   });
+ * ```
  */
 export function sharedQuery<TArgs extends unknown[], TData>(
   // The name could have been auto-generated, but we let the user give us a
@@ -256,7 +266,10 @@ const DEFAULT_QUERY_STATE_ENTRY: QueryStateValue<unknown> = { loading: true };
 /**
  * React hook to make use of a shared query inside any React component.
  *
- *     const users = useSharedQuery(usersQuery, ["123"]);
+ * Example:
+ * ```
+ *   const users = useSharedQuery(usersQuery, ["123"]);
+ * ```
  */
 export function useSharedQuery<TArgs extends unknown[], TData>(
   query: SharedQuery<TArgs, TData>,
