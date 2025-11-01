@@ -7,7 +7,7 @@ import { stringifyDeterministicForKeys } from "./utils/stringify";
 
 export type FetchFn<TArgs extends unknown[], TData> = (
   ...args: TArgs
-) => Promise<TData>;
+) => Promise<TData> | TData;
 
 export type QueryStateValue<TData> = {
   loading: boolean;
@@ -28,11 +28,20 @@ export type UseQueryResult<TData> = QueryStateValue<TData> & {
  */
 export type SharedQueryState<TData> = Record<string, QueryStateValue<TData>>;
 
-export type SharedQueryOptions<TData> = {
+export type SharedQueryOptions<TArgs extends unknown[], TData> = {
+  // The name could have been auto-generated, but we let the user give us a
+  // human-readable name that can be identified quickly in the logs.
+  queryName: string;
+
+  // Function to fetch data.
+  queryFn: FetchFn<TArgs, TData>;
+
   // ms before data considered stale; 0 means never stale.
   staleMs?: number;
+
   // ms before data is removed from cache; 0 means never expire.
   expiryMs?: number;
+
   // Trigger background re-fetch if stale.
   revalidateOnStale?: boolean;
 } & StorageOptions<SharedQueryState<TData>>;
@@ -42,15 +51,18 @@ const DEFAULT_STALE_MS = 0;
 export class SharedQuery<TArgs extends unknown[], TData> {
   private readonly inflightPromises = new Map<string, Promise<TData>>();
   public readonly queryState: SharedState<SharedQueryState<TData>>;
+
+  public readonly queryName: string;
+  private readonly queryFn: FetchFn<TArgs, TData>;
   public readonly expiryMs: number;
   public readonly staleMs: number;
   public readonly revalidateOnStale: boolean;
 
-  public constructor(
-    public readonly queryName: string,
-    private readonly fetchFn: FetchFn<TArgs, TData>,
-    options?: SharedQueryOptions<TData>,
-  ) {
+  public constructor(options: SharedQueryOptions<TArgs, TData>) {
+    this.queryName = options.queryName;
+
+    this.queryFn = options.queryFn;
+
     this.expiryMs =
       options?.expiryMs !== undefined
         ? options?.expiryMs
@@ -89,36 +101,6 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     return ageMs > this.expiryMs;
   }
 
-  private fetchNoCaching(queryKey: string, ...args: TArgs): Promise<TData> {
-    const inflightPromise = this.inflightPromises.get(queryKey);
-
-    // De-duplicate in-flight requests
-    if (inflightPromise) {
-      console.log(`Deduplicating inflight fetch for ${queryKey}`);
-      return inflightPromise;
-    }
-
-    // Fetch new data
-    console.log(`Start fetching ${queryKey}`);
-
-    const promise = this.fetchFn(...args)
-      .then((data) => {
-        console.log(`Successfully fetched ${queryKey}`);
-        this.setData(queryKey, data, Date.now());
-        return data;
-      })
-      .catch((e) => {
-        console.error(`Failed to fetch ${queryKey}: ${e}`);
-        throw e;
-      })
-      .finally(() => {
-        this.inflightPromises.delete(queryKey);
-      });
-
-    this.inflightPromises.set(queryKey, promise);
-    return promise;
-  }
-
   public async getCachedOrFetch(...args: TArgs): Promise<TData> {
     const queryKey = this.getQueryKey(args);
     const cached = this.queryState.getSnapshot()?.[queryKey];
@@ -135,7 +117,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       // If stale, optionally update the data in the background.
       if (this.revalidateOnStale) {
         console.log(`revalidateOnStale for ${queryKey}`);
-        void this.fetchNoCaching(queryKey, ...args);
+        void this.dedupedFetch(queryKey, ...args);
       }
 
       // Still return stale data immediately.
@@ -143,7 +125,40 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       return cached.data;
     }
 
-    return await this.fetchNoCaching(queryKey, ...args);
+    return await this.dedupedFetch(queryKey, ...args);
+  }
+
+  private dedupedFetch(queryKey: string, ...args: TArgs): Promise<TData> {
+    const inflightPromise = this.inflightPromises.get(queryKey);
+
+    // De-duplicate in-flight requests
+    if (inflightPromise) {
+      console.log(`Deduplicating inflight fetch for ${queryKey}`);
+      return inflightPromise;
+    }
+
+    // Fetch new data
+    const promise = this.startFetching(queryKey, args);
+
+    this.inflightPromises.set(queryKey, promise);
+    return promise;
+  }
+
+  private async startFetching(queryKey: string, args: TArgs) {
+    console.log(`Start fetching ${queryKey}`);
+
+    try {
+      const data = await this.queryFn(...args);
+
+      console.log(`Successfully fetched ${queryKey}`);
+      this.setData(queryKey, data, Date.now());
+      return data;
+    } catch (e) {
+      console.error(`Failed to fetch ${queryKey}: ${e}`);
+      throw e;
+    } finally {
+      this.inflightPromises.delete(queryKey);
+    }
   }
 
   /** Set the data directly if the user obtained it from somewhere else. */
@@ -164,7 +179,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   /** Do a new fetch even when the data is already cached. */
   public async updateFromSource(...args: TArgs): Promise<TData> {
     const key = this.getQueryKey(args);
-    return await this.fetchNoCaching(key, ...args);
+    return await this.dedupedFetch(key, ...args);
   }
 
   /** Delete the currently cached data. */
@@ -202,16 +217,14 @@ const seenQueryNames = new Set<string>();
 export function sharedQuery<TArgs extends unknown[], TData>(
   // The name could have been auto-generated, but we let the user give us a
   // human-readable name that can be identified quickly in the logs.
-  queryName: string,
-  fetchFn: FetchFn<TArgs, TData>,
-  options?: SharedQueryOptions<TData>,
+  options: SharedQueryOptions<TArgs, TData>,
 ): SharedQuery<TArgs, TData> {
-  if (seenQueryNames.has(queryName)) {
-    throw new Error(`Duplicate shared query "${queryName}"`);
+  if (seenQueryNames.has(options.queryName)) {
+    throw new Error(`Duplicate shared query "${options.queryName}"`);
   }
-  seenQueryNames.add(queryName);
+  seenQueryNames.add(options.queryName);
 
-  return new SharedQuery(queryName, fetchFn, options);
+  return new SharedQuery(options);
 }
 
 const DEFAULT_QUERY_STATE_ENTRY: QueryStateValue<unknown> = { loading: true };
