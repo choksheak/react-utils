@@ -12,6 +12,7 @@ npm run gen-types
 
 echo Copy files
 cp -r package.json LICENSE README.md src dist
+npm run gen-exports
 
 echo Remove test files
 rm dist/*.test.* dist/src/*.test.*

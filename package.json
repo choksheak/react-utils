@@ -10,34 +10,6 @@
   "files": [
     "**/*"
   ],
-  "exports": {
-    "./package.json": "./package.json",
-    "./fetcher": {
-      "types": "./fetcher.d.ts",
-      "import": "./fetcher.js"
-    },
-    "./sharedQuery": {
-      "types": "./sharedQuery.d.ts",
-      "import": "./sharedQuery.js"
-    },
-    "./sharedState": {
-      "types": "./sharedState.d.ts",
-      "import": "./sharedState.js"
-    }
-  },
-  "typesVersions": {
-    "*": {
-      "fetcher": [
-        "fetcher.d.ts"
-      ],
-      "sharedQuery": [
-        "sharedQuery.d.ts"
-      ],
-      "sharedState": [
-        "sharedState.d.ts"
-      ]
-    }
-  },
   "scripts": {
     "lint": "eslint .",
     "fix": "eslint . --fix",
@@ -50,6 +22,7 @@
     "ls": "lint-staged",
     "docs": "rm -rf docs && typedoc `find src -name '*.ts' ! -name '*.test.ts'` --out docs --name 'Chok’s React Utilities'",
     "gen-types": "tsc --emitDeclarationOnly --declaration",
+    "gen-exports": "tsx scripts/gen-exports.ts",
     "bump": "tsx scripts/bump-version.ts",
     "bump:patch": "tsx scripts/bump-version.ts --patch",
     "bump:minor": "tsx scripts/bump-version.ts --minor",
