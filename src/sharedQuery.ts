@@ -1,8 +1,12 @@
-import { DEFAULT_EXPIRY_DELTA_MS } from "@choksheak/ts-utils/kvStore";
+import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import { SharedState, sharedState, useSharedState } from "./sharedState";
-import { StorageOptions } from "./utils/storage";
+import {
+  SharedState,
+  sharedState,
+  SharedStateOptions,
+  useSharedState,
+} from "./sharedState";
 import { stringifyDeterministicForKeys } from "./utils/stringify";
 
 export type FetchFn<TArgs extends unknown[], TData> = (
@@ -22,6 +26,8 @@ export type UseQueryResult<TData> = QueryStateValue<TData> & {
   setData: (data: TData, dataUpdatedMs?: number) => void;
   deleteData: () => void;
 };
+
+export type PersistTo = "localStorage" | "indexedDb";
 
 /**
  * The full query state is a record of all the fetch states mapped by
@@ -45,9 +51,19 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = {
 
   // Trigger background re-fetch if stale.
   refetchOnStale?: boolean;
-} & StorageOptions<SharedQueryState<TData>>;
 
-const DEFAULT_STALE_MS = 0;
+  // Shortcut to set the localStorageKey or indexedDbKey automatically from
+  // queryName. This is important because it avoids requiring the user to
+  // specify the same queryName twice everytime.
+  persistTo?: PersistTo;
+} & SharedStateOptions<SharedQueryState<TData>>;
+
+/** Users can override these values globally. */
+export const SharedQueryDefaults = {
+  staleMs: 0,
+  expiryMs: 30 * MS_PER_DAY,
+  persistTo: undefined as PersistTo | undefined,
+};
 
 export class SharedQuery<TArgs extends unknown[], TData> {
   private readonly inflightPromises = new Map<string, Promise<TData>>();
@@ -67,12 +83,23 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     this.expiryMs =
       options?.expiryMs !== undefined
         ? options?.expiryMs
-        : DEFAULT_EXPIRY_DELTA_MS;
+        : SharedQueryDefaults.expiryMs;
 
     this.staleMs =
-      options?.staleMs !== undefined ? options?.staleMs : DEFAULT_STALE_MS;
+      options?.staleMs !== undefined
+        ? options?.staleMs
+        : SharedQueryDefaults.staleMs;
 
     this.refetchOnStale = Boolean(options?.refetchOnStale);
+
+    // Apply shortcut when using `persistTo`.
+    const persistTo = options.persistTo ?? SharedQueryDefaults.persistTo;
+
+    if (persistTo === "localStorage") {
+      options.localStorageKey = options.queryName;
+    } else if (persistTo === "indexedDb") {
+      options.indexedDbKey = options.queryName;
+    }
 
     this.queryState = sharedState<SharedQueryState<TData>>(
       {},

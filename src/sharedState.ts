@@ -1,4 +1,3 @@
-import { DEFAULT_EXPIRY_DELTA_MS } from "@choksheak/ts-utils/kvStore";
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
 import { useSyncExternalStore } from "react";
 
@@ -26,19 +25,19 @@ import {
 /**
  * These values are configurable by the user at any time.
  */
-export class SharedStateConfig {
+export const SharedStateDefaults = {
   /**
    * Default duration for storage expiration in milliseconds. Initial value
    * is 30 days, but can be changed to anything.
    */
-  public static storeExpiryMs = MS_PER_DAY * 30;
+  storeExpiryMs: 30 * MS_PER_DAY,
 
   /**
    * True to load from storage only on mount, false (default) to load in
    * the top level scope when the shared state is defined.
    */
-  public static lazyLoad = false;
-}
+  lazyLoad: false,
+};
 
 /************************************************************************/
 /* Shared state implementation                                          */
@@ -131,7 +130,10 @@ export class SharedState<T> {
     this.pubSubKey = String(stateKey++);
 
     // Use max of 1 storage adapter per shared state.
-    this.storageAdapter = getStorageAdapter(options, DEFAULT_EXPIRY_DELTA_MS);
+    this.storageAdapter = getStorageAdapter(
+      options,
+      SharedStateDefaults.storeExpiryMs,
+    );
 
     // Same as this.setValue, but binding the `this` reference.
     this.setValueBounded = (arg) => this.setValue(arg);
@@ -141,7 +143,8 @@ export class SharedState<T> {
     pubSubStore.setNoNotify(this.pubSubKey, defaultValue);
 
     const lazyLoad = options?.lazyLoad;
-    const lazy = lazyLoad !== undefined ? lazyLoad : SharedStateConfig.lazyLoad;
+    const lazy =
+      lazyLoad !== undefined ? lazyLoad : SharedStateDefaults.lazyLoad;
 
     if (!lazy) {
       void this.initDefaultValueOnce();
