@@ -38,7 +38,7 @@ export type UseQueryResult<TData> = QueryStateValue<TData> & {
   /**
    * Manually refresh the data by doing a new query.
    */
-  refetch: () => Promise<TData>;
+  refetch: () => void;
 
   /**
    * If you got the data from somewhere else (e.g. an in-memory data update),
@@ -476,70 +476,75 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     | undefined;
 
   // The fetch logic wrapped in useCallback to be stable for useEffect
-  const execute = useCallback(async () => {
-    query.log(`Begin executing shared query ${queryKey}`);
+  const execute = useCallback(
+    async (forceRefresh: boolean) => {
+      query.log(`Begin executing shared query ${queryKey}`);
 
-    setQueryState((prev) => {
-      const clone = { ...prev };
+      setQueryState((prev) => {
+        const clone = { ...prev };
 
-      clone[queryKey] = {
-        ...(clone[queryKey] ?? {}),
-        lastUpdatedMs: Date.now(),
-        loading: true,
-      };
+        clone[queryKey] = {
+          ...(clone[queryKey] ?? {}),
+          lastUpdatedMs: Date.now(),
+          loading: true,
+        };
 
-      return clone;
-    });
+        return clone;
+      });
 
-    try {
-      const data = await query.getCachedOrFetch(...stableArgs);
+      try {
+        const data = await (forceRefresh
+          ? query.updateFromSource(...stableArgs)
+          : query.getCachedOrFetch(...stableArgs));
 
-      if (isMounted.current) {
-        setQueryState((prev) => {
-          const clone = { ...prev };
-          const now = Date.now();
+        if (isMounted.current) {
+          setQueryState((prev) => {
+            const clone = { ...prev };
+            const now = Date.now();
 
-          clone[queryKey] = {
-            // Don't keep old error.
-            lastUpdatedMs: now,
-            loading: false,
-            data,
-            dataUpdatedMs: now,
-          };
+            clone[queryKey] = {
+              // Don't keep old error.
+              lastUpdatedMs: now,
+              loading: false,
+              data,
+              dataUpdatedMs: now,
+            };
 
-          return clone;
-        });
+            return clone;
+          });
+        }
+      } catch (e) {
+        const error =
+          e instanceof Error
+            ? e
+            : new Error(`An unknown error occurred during fetch: ${e}`);
+
+        if (isMounted.current) {
+          setQueryState((prev) => {
+            const clone = { ...prev };
+            const now = Date.now();
+
+            clone[queryKey] = {
+              // Keep old data.
+              ...(clone[queryKey] ?? {}),
+              lastUpdatedMs: now,
+              loading: false,
+              error,
+              errorUpdatedMs: now,
+            };
+
+            return clone;
+          });
+        }
       }
-    } catch (e) {
-      const error =
-        e instanceof Error
-          ? e
-          : new Error(`An unknown error occurred during fetch: ${e}`);
-
-      if (isMounted.current) {
-        setQueryState((prev) => {
-          const clone = { ...prev };
-          const now = Date.now();
-
-          clone[queryKey] = {
-            // Keep old data.
-            ...(clone[queryKey] ?? {}),
-            lastUpdatedMs: now,
-            loading: false,
-            error,
-            errorUpdatedMs: now,
-          };
-
-          return clone;
-        });
-      }
-    }
-  }, [query, queryKey, setQueryState, stableArgs]);
+    },
+    [query, queryKey, setQueryState, stableArgs],
+  );
 
   useEffect(() => {
     isMounted.current = true;
 
-    void execute();
+    void execute(false);
 
     return () => {
       isMounted.current = false;
@@ -558,7 +563,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         return Boolean(controller);
       },
       refetch: () => {
-        return query.updateFromSource(...stableArgs);
+        void execute(true);
       },
       setData: (data: TData, dataUpdatedMs?: number) => {
         query.setData(queryKey, data, dataUpdatedMs ?? Date.now());
@@ -567,5 +572,5 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         query.deleteData(queryKey);
       },
     };
-  }, [query, queryKey, queryStateValue, stableArgs]);
+  }, [execute, query, queryKey, queryStateValue]);
 }
