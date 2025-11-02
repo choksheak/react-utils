@@ -9,6 +9,7 @@ import {
   useSharedState,
 } from "./sharedState";
 import { stringifyDeterministicForKeys } from "./utils/stringify";
+import { useDeepMemo } from "./utils/useDeepMemo";
 
 export type QueryFn<TArgs extends unknown[], TData> = (
   ...args: TArgs
@@ -170,22 +171,13 @@ export class SharedQuery<TArgs extends unknown[], TData> {
    * using `controller.signal`. So if you need both the controller and the
    * signal, just use this function.
    */
-  public getAbortControllerByKey(queryKey: string): AbortController | null {
+  public getAbortController(queryKey: string): AbortController | null {
     return this.inflightQueries.get(queryKey)?.abortController ?? null;
   }
 
-  public getAbortController(args: TArgs): AbortController | null {
-    const queryKey = this.getQueryKey(args);
-    return this.getAbortControllerByKey(queryKey);
-  }
-
   /** Get the AbortSignal to check for query abortions. */
-  public getAbortSignalByKey(queryKey: string): AbortSignal | null {
-    return this.getAbortControllerByKey(queryKey)?.signal ?? null;
-  }
-
-  public getAbortSignal(args: TArgs): AbortSignal | null {
-    return this.getAbortController(args)?.signal ?? null;
+  public getAbortSignal(queryKey: string): AbortSignal | null {
+    return this.getAbortController(queryKey)?.signal ?? null;
   }
 
   private isStale(dataUpdatedMs: number): boolean {
@@ -287,9 +279,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   }
 
   /** Delete the cached data for one set of arguments. */
-  public deleteData(args: TArgs): void {
-    const queryKey = this.getQueryKey(args);
-
+  public deleteData(queryKey: string): void {
     const record = this.queryState.getSnapshot();
     const clone = { ...record };
     delete clone[queryKey];
@@ -468,14 +458,17 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
   // Default to use no arguments.
   args: TArgs = [] as unknown as TArgs,
 ): UseQueryResult<TData> {
+  // We don't expect users to provide a stable `args`, so stabilize it here.
+  const stableArgs = useDeepMemo(args);
+
   const [queryState, setQueryState] = useSharedState(query.queryState);
 
   const isMounted = useRef(true);
 
-  // Identify args changes using deep equality.
-  // We intentionally chose not to memoize this value because args is likely
-  // to be an unstable value (changes on every render).
-  const queryKey = query.getQueryKey(args);
+  const queryKey = useMemo(
+    () => query.getQueryKey(stableArgs),
+    [query, stableArgs],
+  );
 
   // The fetch logic wrapped in useCallback to be stable for useEffect
   const execute = useCallback(async () => {
@@ -494,7 +487,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     });
 
     try {
-      const data = await query.getCachedOrFetch(...args);
+      const data = await query.getCachedOrFetch(...stableArgs);
 
       if (isMounted.current) {
         setQueryState((prev) => {
@@ -536,7 +529,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         });
       }
     }
-  }, [queryKey]);
+  }, [query, queryKey, setQueryState, stableArgs]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -556,19 +549,19 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     return {
       ...state,
       abortCurrentQuery: (reason?: unknown) => {
-        const controller = query.getAbortControllerByKey(queryKey);
+        const controller = query.getAbortController(queryKey);
         controller?.abort(reason);
         return Boolean(controller);
       },
       refetch: () => {
-        return query.updateFromSource(...args);
+        return query.updateFromSource(...stableArgs);
       },
       setData: (data: TData, dataUpdatedMs?: number) => {
         query.setData(queryKey, data, dataUpdatedMs ?? Date.now());
       },
       deleteData: () => {
-        query.deleteData(args);
+        query.deleteData(queryKey);
       },
     };
-  }, [query, queryKey, queryState]);
+  }, [query, queryKey, queryState, stableArgs]);
 }
