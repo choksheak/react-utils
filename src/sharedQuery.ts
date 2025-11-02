@@ -10,7 +10,7 @@ import {
 } from "./sharedState";
 import { stringifyDeterministicForKeys } from "./utils/stringify";
 
-export type FetchFn<TArgs extends unknown[], TData> = (
+export type QueryFn<TArgs extends unknown[], TData> = (
   ...args: TArgs
 ) => Promise<TData> | TData;
 
@@ -29,8 +29,22 @@ export type QueryStateValue<TData> = {
 };
 
 export type UseQueryResult<TData> = QueryStateValue<TData> & {
+  /**
+   * Cancels the inflight query (if any). Returns true if canceled.
+   */
+  abortCurrentQuery: (reason?: unknown) => boolean;
+
+  /**
+   * Manually refresh the data by doing a new query.
+   */
   refetch: () => Promise<TData>;
+
+  /**
+   * If you got the data from somewhere else (e.g. an in-memory data update),
+   * just set it directly.
+   */
   setData: (data: TData, dataUpdatedMs?: number) => void;
+
   deleteData: () => void;
 };
 
@@ -48,7 +62,7 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = {
   queryName: string;
 
   // Function to fetch data.
-  queryFn: FetchFn<TArgs, TData>;
+  queryFn: QueryFn<TArgs, TData>;
 
   // ms before data considered stale; 0 means always stale.
   staleMs?: number;
@@ -83,11 +97,15 @@ export const SharedQueryDefaults = {
 };
 
 export class SharedQuery<TArgs extends unknown[], TData> {
-  private readonly inflightPromises = new Map<string, Promise<TData>>();
+  private readonly inflightQueries = new Map<
+    string,
+    { promise: Promise<TData>; abortController: AbortController }
+  >();
+
   public readonly queryState: SharedState<SharedQueryState<TData>>;
 
   public readonly queryName: string;
-  private readonly queryFn: FetchFn<TArgs, TData>;
+  private readonly queryFn: QueryFn<TArgs, TData>;
   public readonly expiryMs: number;
   public readonly staleMs: number;
   public readonly refetchOnStale: boolean;
@@ -133,8 +151,34 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     );
   }
 
+  /** Returns a key to identify requests based on the given args. */
   public getQueryKey(args: TArgs): string {
     return this.queryName + ":" + stringifyDeterministicForKeys(args);
+  }
+
+  /**
+   * Get the AbortController to abort the inflight query (if any).
+   *
+   * Note that once you get the controller, you can also get the signal easily
+   * using `controller.signal`. So if you need both the controller and the
+   * signal, just use this function.
+   */
+  public getAbortControllerByKey(queryKey: string): AbortController | null {
+    return this.inflightQueries.get(queryKey)?.abortController ?? null;
+  }
+
+  public getAbortController(args: TArgs): AbortController | null {
+    const queryKey = this.getQueryKey(args);
+    return this.getAbortControllerByKey(queryKey);
+  }
+
+  /** Get the AbortSignal to check for query abortions. */
+  public getAbortSignalByKey(queryKey: string): AbortSignal | null {
+    return this.getAbortControllerByKey(queryKey)?.signal ?? null;
+  }
+
+  public getAbortSignal(args: TArgs): AbortSignal | null {
+    return this.getAbortController(args)?.signal ?? null;
   }
 
   private isStale(dataUpdatedMs: number): boolean {
@@ -179,18 +223,20 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   }
 
   private dedupedFetch(queryKey: string, ...args: TArgs): Promise<TData> {
-    const inflightPromise = this.inflightPromises.get(queryKey);
+    const inflightQuery = this.inflightQueries.get(queryKey);
 
     // De-duplicate in-flight requests
-    if (inflightPromise) {
+    if (inflightQuery) {
       console.log(`Deduplicating inflight fetch for ${queryKey}`);
-      return inflightPromise;
+      return inflightQuery.promise;
     }
 
     // Fetch new data
     const promise = this.startFetching(queryKey, args);
+    const abortController = new AbortController();
 
-    this.inflightPromises.set(queryKey, promise);
+    this.inflightQueries.set(queryKey, { promise, abortController });
+
     return promise;
   }
 
@@ -207,7 +253,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       console.error(`Failed to fetch ${queryKey}: ${e}`);
       throw e;
     } finally {
-      this.inflightPromises.delete(queryKey);
+      this.inflightQueries.delete(queryKey);
     }
   }
 
@@ -244,13 +290,24 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     delete clone[queryKey];
     this.queryState.setValue(clone);
 
-    this.inflightPromises.delete(queryKey);
+    const inflight = this.inflightQueries.get(queryKey);
+    if (inflight) {
+      this.inflightQueries.delete(queryKey);
+      inflight.abortController.abort("Deleted");
+    }
   }
 
   /** Delete all currently cached data & all inflight promises. */
   public clear(): void {
     this.queryState.delete();
-    this.inflightPromises.clear();
+
+    for (const { abortController } of Array.from(
+      this.inflightQueries.values(),
+    )) {
+      abortController.abort("Cleared");
+    }
+
+    this.inflightQueries.clear();
   }
 
   /**
@@ -493,6 +550,11 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
     return {
       ...state,
+      abortCurrentQuery: (reason?: unknown) => {
+        const controller = query.getAbortControllerByKey(queryKey);
+        controller?.abort(reason);
+        return Boolean(controller);
+      },
       refetch: () => {
         return query.updateFromSource(...args);
       },
