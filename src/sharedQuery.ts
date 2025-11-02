@@ -25,7 +25,14 @@ export type QueryStateValue<TData> = {
   loading: boolean;
   data?: TData;
   dataUpdatedMs?: number;
-  error?: Error;
+
+  /**
+   * Use unknown type for error because we can't assume what type of variable
+   * will be thrown from the query function. We also don't want to add this
+   * type to QueryStateValue<TError> as it adds complexity to the type.
+   */
+  error?: unknown;
+
   errorUpdatedMs?: number;
 };
 
@@ -514,11 +521,6 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
           });
         }
       } catch (e) {
-        const error =
-          e instanceof Error
-            ? e
-            : new Error(`An unknown error occurred during fetch: ${e}`);
-
         if (isMounted.current) {
           setQueryState((prev) => {
             const clone = { ...prev };
@@ -529,7 +531,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
               ...(clone[queryKey] ?? {}),
               lastUpdatedMs: now,
               loading: false,
-              error,
+              error: e,
               errorUpdatedMs: now,
             };
 
