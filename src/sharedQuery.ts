@@ -106,6 +106,9 @@ export const SharedQueryDefaults = {
   // Keep in cache for a long time.
   expiryMs: 30 * MS_PER_DAY,
 
+  // Always refetch automatically if the data is stale.
+  refetchOnStale: true,
+
   // No default persistence configured.
   persistTo: undefined as PersistTo | undefined,
 
@@ -138,20 +141,13 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
   public constructor(options: SharedQueryOptions<TArgs, TData>) {
     this.queryName = options.queryName;
-
     this.queryFn = options.queryFn;
 
-    this.expiryMs =
-      options?.expiryMs !== undefined
-        ? options?.expiryMs
-        : SharedQueryDefaults.expiryMs;
+    this.staleMs = options?.staleMs ?? SharedQueryDefaults.staleMs;
+    this.expiryMs = options?.expiryMs ?? SharedQueryDefaults.expiryMs;
 
-    this.staleMs =
-      options?.staleMs !== undefined
-        ? options?.staleMs
-        : SharedQueryDefaults.staleMs;
-
-    this.refetchOnStale = Boolean(options?.refetchOnStale);
+    this.refetchOnStale =
+      options?.refetchOnStale ?? SharedQueryDefaults.refetchOnStale;
 
     // Apply shortcut when using `persistTo`.
     // Specifying the storage keys will take precedence over `persistTo`.
@@ -171,7 +167,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     this.log = options?.log ?? SharedQueryDefaults.log;
 
     this.queryState = sharedState<SharedQueryState<TData>>(
-      {},
+      {}, // defaultValue
       {
         ...options,
         // Fallback to use expiryMs for the storeExpiryMs.
