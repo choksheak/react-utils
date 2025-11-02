@@ -1,4 +1,5 @@
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
+import getByteSize from "object-sizeof";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import {
@@ -14,6 +15,12 @@ export type FetchFn<TArgs extends unknown[], TData> = (
 ) => Promise<TData> | TData;
 
 export type QueryStateValue<TData> = {
+  /**
+   * When this record was last updated. Used for LRU determination. If you want
+   * the data age, please use `dataUpdatedMs` instead.
+   */
+  lastUpdatedMs: number;
+
   loading: boolean;
   data?: TData;
   dataUpdatedMs?: number;
@@ -43,7 +50,7 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = {
   // Function to fetch data.
   queryFn: FetchFn<TArgs, TData>;
 
-  // ms before data considered stale; 0 means never stale.
+  // ms before data considered stale; 0 means always stale.
   staleMs?: number;
 
   // ms before data is removed from cache; 0 means never expire.
@@ -56,6 +63,14 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = {
   // queryName. This is important because it avoids requiring the user to
   // specify the same queryName twice everytime.
   persistTo?: PersistTo;
+
+  // Max number of entries to keep. The oldest entries will be discarded.
+  // The last record cannot be discarded. 0 means no limit.
+  maxSize?: number;
+
+  // Max number of bytes to keep. The oldest entries will be discarded.
+  // The last record cannot be discarded. 0 means no limit.
+  maxBytes?: number;
 } & SharedStateOptions<SharedQueryState<TData>>;
 
 /** Users can override these values globally. */
@@ -63,6 +78,8 @@ export const SharedQueryDefaults = {
   staleMs: 0,
   expiryMs: 30 * MS_PER_DAY,
   persistTo: undefined as PersistTo | undefined,
+  maxSize: 100, // 100 is not too large, but please tweak accordingly
+  maxBytes: 100_000, // 100kb before GC
 };
 
 export class SharedQuery<TArgs extends unknown[], TData> {
@@ -74,6 +91,8 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   public readonly expiryMs: number;
   public readonly staleMs: number;
   public readonly refetchOnStale: boolean;
+  public readonly maxSize: number;
+  public readonly maxBytes: number;
 
   public constructor(options: SharedQueryOptions<TArgs, TData>) {
     this.queryName = options.queryName;
@@ -100,6 +119,9 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     } else if (persistTo === "indexedDb") {
       options.indexedDbKey = options.queryName;
     }
+
+    this.maxSize = options?.maxSize ?? SharedQueryDefaults.maxSize;
+    this.maxBytes = options?.maxBytes ?? SharedQueryDefaults.maxBytes;
 
     this.queryState = sharedState<SharedQueryState<TData>>(
       {},
@@ -196,12 +218,15 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     dataUpdatedMs = Date.now(),
   ): Promise<void> {
     const entry: QueryStateValue<TData> = {
+      lastUpdatedMs: Date.now(),
       loading: false,
       data,
       dataUpdatedMs,
     };
 
     this.queryState.setValue((prev) => ({ ...prev, [queryKey]: entry }));
+
+    this.enforceSizeLimit();
   }
 
   /** Do a new fetch even when the data is already cached. */
@@ -226,6 +251,108 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   public clear(): void {
     this.queryState.delete();
     this.inflightPromises.clear();
+  }
+
+  /**
+   * Discard the oldest entries if the size exceeds the limit. The last
+   * remaining record cannot be deleted no matter what the limit is.
+   */
+  public enforceSizeLimit(): void {
+    // Skip if there are no limits.
+    if (!this.maxSize && !this.maxBytes) {
+      return;
+    }
+
+    const oldState = this.queryState.getSnapshot();
+    const oldSize = Object.keys(oldState).length;
+
+    // Cannot do GC if size is 1 or less.
+    if (oldSize <= 1) {
+      return;
+    }
+
+    const oldByteSize = getByteSize(oldState);
+
+    let newState = oldState;
+    let needUpdate = false;
+
+    // Limit by number of records.
+    if (this.maxSize) {
+      const numToCut = oldSize - this.maxSize;
+
+      if (numToCut > 0) {
+        console.log(
+          `enforceSizeLimit for ${this.queryName} needed due to size ${oldSize} > ${this.maxSize}`,
+        );
+
+        newState = { ...newState }; // shallow clone
+        needUpdate = true;
+
+        Object.entries(newState)
+          .sort(
+            (entry1, entry2) =>
+              // Sort descending.
+              entry2[1].lastUpdatedMs - entry1[1].lastUpdatedMs,
+          )
+          .slice(-numToCut)
+          .forEach(([key]) => {
+            delete newState[key];
+          });
+      }
+    }
+
+    // Limit by byte size.
+    if (this.maxBytes && Object.keys(newState).length > 1) {
+      // Recompute only if changed by above code.
+      const currentByteSize = needUpdate ? getByteSize(newState) : oldByteSize;
+
+      let bytesToCut = currentByteSize - this.maxBytes;
+
+      if (bytesToCut > 0) {
+        console.log(
+          `enforceSizeLimit for ${this.queryName} needed due to byte size ${currentByteSize.toLocaleString()} > ${this.maxBytes.toLocaleString()}`,
+        );
+
+        // Shallow clone only if not already cloned above.
+        if (!needUpdate) {
+          newState = { ...newState };
+          needUpdate = true;
+        }
+
+        const entriesByTimeAscending = Object.entries(newState).sort(
+          (entry1, entry2) => entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
+        );
+
+        for (
+          let i = 0;
+          // Leave the last record entriesByTimeAscending[len-1] untouched.
+          i < entriesByTimeAscending.length - 1 && bytesToCut > 0;
+          i++
+        ) {
+          const key = entriesByTimeAscending[i][0];
+          const thisSize = getByteSize(key) + getByteSize(newState[key]);
+          delete newState[key];
+          bytesToCut -= thisSize;
+        }
+      }
+    }
+
+    // Update the state.
+    if (needUpdate) {
+      this.queryState.setValue(newState);
+
+      // Log to inform user that the data was trimmed.
+      console.log(
+        `Trimmed data for ${this.queryName}: size=(${oldSize} -> ${Object.keys(newState).length}) (limit=${this.maxSize}), byteSize=(${oldByteSize.toLocaleString()} -> ${getByteSize(newState).toLocaleString()}) (limit=${this.maxBytes.toLocaleString()})`,
+      );
+
+      return;
+    }
+
+    // Log to indicate why trimming was not needed.
+    console.log(
+      `No need to trim data for ${this.queryName}: size=${oldSize} (limit=${this.maxSize}), byteSize=${oldByteSize.toLocaleString()} (limit=${this.maxBytes.toLocaleString()})`,
+    );
   }
 }
 
@@ -261,7 +388,10 @@ export function sharedQuery<TArgs extends unknown[], TData>(
   return new SharedQuery(options);
 }
 
-const DEFAULT_QUERY_STATE_ENTRY: QueryStateValue<unknown> = { loading: true };
+const DEFAULT_QUERY_STATE_ENTRY: QueryStateValue<unknown> = {
+  lastUpdatedMs: 0,
+  loading: true,
+};
 
 /**
  * React hook to make use of a shared query inside any React component.
@@ -291,10 +421,13 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
     setQueryState((prev) => {
       const clone = { ...prev };
+
       clone[queryKey] = {
         ...(clone[queryKey] ?? {}),
+        lastUpdatedMs: Date.now(),
         loading: true,
       };
+
       return clone;
     });
 
@@ -304,12 +437,16 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
       if (isMounted.current) {
         setQueryState((prev) => {
           const clone = { ...prev };
+          const now = Date.now();
+
           clone[queryKey] = {
             // Don't keep old error.
+            lastUpdatedMs: now,
             loading: false,
             data,
-            dataUpdatedMs: Date.now(),
+            dataUpdatedMs: now,
           };
+
           return clone;
         });
       }
@@ -322,13 +459,17 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
       if (isMounted.current) {
         setQueryState((prev) => {
           const clone = { ...prev };
+          const now = Date.now();
+
           clone[queryKey] = {
             // Keep old data.
             ...(clone[queryKey] ?? {}),
+            lastUpdatedMs: now,
             loading: false,
             error,
-            errorUpdatedMs: Date.now(),
+            errorUpdatedMs: now,
           };
+
           return clone;
         });
       }
