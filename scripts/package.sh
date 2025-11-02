@@ -11,7 +11,7 @@ npm run build
 npm run gen-types
 
 echo Copy files
-cp -r package.json LICENSE README.md src dist
+cp -r package.json LICENSE README.md dist
 
 echo Remove test files
 find dist/ -type f -name "*.test.*" -delete
