@@ -5,7 +5,19 @@ const DIST_DIR = path.join(process.cwd(), "dist");
 const PACKAGE_JSON_PATH = path.join(DIST_DIR, "package.json");
 
 // Type definitions for package.json structure
-type ExportEntry = string | Record<"types" | "import", string>;
+type EnvToFile = {
+  production: string;
+  development: string;
+  default: string;
+};
+
+type ExportEntry =
+  | string
+  | {
+      types: string;
+      import: EnvToFile;
+      require: EnvToFile;
+    };
 
 type PackageJson = {
   exports?: Record<string, ExportEntry>;
@@ -29,7 +41,7 @@ async function generateExportsConfig() {
 
     for (const file of files) {
       // We only care about .js and .d.ts files (the entry points)
-      if (file.endsWith(".js")) {
+      if (file.endsWith(".cjs") && !file.endsWith(".min.cjs")) {
         const baseName = path.parse(file).name;
 
         // Skip the main entry point if it's named index (which is usually
@@ -62,7 +74,16 @@ async function generateExportsConfig() {
       // Exports entry
       exports[`./${name}`] = {
         types: `./${name}.d.ts`,
-        import: `./${name}.js`,
+        import: {
+          production: `./${name}.min.mjs`,
+          development: `./${name}.mjs`,
+          default: `./${name}.mjs`,
+        },
+        require: {
+          production: `./${name}.min.cjs`,
+          development: `./${name}.cjs`,
+          default: `./${name}.cjs`,
+        },
       };
 
       // TypesVersions entry
