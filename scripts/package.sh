@@ -18,7 +18,3 @@ find dist/ -type f -name "*.test.*" -delete
 
 echo Gen exports
 npm run gen-exports
-
-echo Add docs
-npm run docs
-cp -r docs dist
