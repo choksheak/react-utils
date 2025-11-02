@@ -143,12 +143,15 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     this.refetchOnStale = Boolean(options?.refetchOnStale);
 
     // Apply shortcut when using `persistTo`.
-    const persistTo = options.persistTo ?? SharedQueryDefaults.persistTo;
+    // Specifying the storage keys will take precedence over `persistTo`.
+    if (!options.localStorageKey && !options.indexedDbKey) {
+      const persistTo = options.persistTo ?? SharedQueryDefaults.persistTo;
 
-    if (persistTo === "localStorage") {
-      options.localStorageKey = options.queryName;
-    } else if (persistTo === "indexedDb") {
-      options.indexedDbKey = options.queryName;
+      if (persistTo === "localStorage") {
+        options.localStorageKey = options.queryName;
+      } else if (persistTo === "indexedDb") {
+        options.indexedDbKey = options.queryName;
+      }
     }
 
     this.maxSize = options?.maxSize ?? SharedQueryDefaults.maxSize;
