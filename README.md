@@ -1,4 +1,4 @@
-# Chok's React Utilities
+# @choksheak/react-utils
 
 Miscellaneous React+TypeScript utilities with support for full tree-shaking.
 
