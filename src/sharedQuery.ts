@@ -470,6 +470,11 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     [query, stableArgs],
   );
 
+  // Make sure typechecker knows this could be undefined.
+  const queryStateValue = queryState[queryKey] as
+    | QueryStateValue<TData>
+    | undefined;
+
   // The fetch logic wrapped in useCallback to be stable for useEffect
   const execute = useCallback(async () => {
     query.log(`Begin executing shared query ${queryKey}`);
@@ -543,8 +548,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
   return useMemo(() => {
     const state =
-      queryState[queryKey] ??
-      (DEFAULT_QUERY_STATE_ENTRY as QueryStateValue<TData>);
+      queryStateValue ?? (DEFAULT_QUERY_STATE_ENTRY as QueryStateValue<TData>);
 
     return {
       ...state,
@@ -563,5 +567,5 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         query.deleteData(queryKey);
       },
     };
-  }, [query, queryKey, queryState, stableArgs]);
+  }, [query, queryKey, queryStateValue, stableArgs]);
 }
