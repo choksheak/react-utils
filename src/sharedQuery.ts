@@ -85,6 +85,9 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = {
   // Max number of bytes to keep. The oldest entries will be discarded.
   // The last record cannot be discarded. 0 means no limit.
   maxBytes?: number;
+
+  // Customize the logger.
+  log?: (...args: unknown[]) => void;
 } & SharedStateOptions<SharedQueryState<TData>>;
 
 /** Users can override these values globally. */
@@ -94,6 +97,7 @@ export const SharedQueryDefaults = {
   persistTo: undefined as PersistTo | undefined,
   maxSize: 100, // 100 is not too large, but please tweak accordingly
   maxBytes: 100_000, // 100kb before GC
+  log: (...args: unknown[]) => console.log("[sharedQuery]", ...args),
 };
 
 export class SharedQuery<TArgs extends unknown[], TData> {
@@ -111,6 +115,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   public readonly refetchOnStale: boolean;
   public readonly maxSize: number;
   public readonly maxBytes: number;
+  public readonly log: (...args: unknown[]) => void;
 
   public constructor(options: SharedQueryOptions<TArgs, TData>) {
     this.queryName = options.queryName;
@@ -140,6 +145,8 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
     this.maxSize = options?.maxSize ?? SharedQueryDefaults.maxSize;
     this.maxBytes = options?.maxBytes ?? SharedQueryDefaults.maxBytes;
+
+    this.log = options?.log ?? SharedQueryDefaults.log;
 
     this.queryState = sharedState<SharedQueryState<TData>>(
       {},
@@ -202,20 +209,18 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     if (cached?.data && !this.isExpired(cached.dataUpdatedMs ?? 0)) {
       // Return cached value if not stale.
       if (!this.isStale(cached.dataUpdatedMs ?? 0)) {
-        console.log(
-          `Return fresh data ${queryKey} from cache without fetching`,
-        );
+        this.log(`Return fresh data ${queryKey} from cache without fetching`);
         return cached.data;
       }
 
       // If stale, optionally update the data in the background.
       if (this.refetchOnStale) {
-        console.log(`refetchOnStale for ${queryKey}`);
+        this.log(`refetchOnStale for ${queryKey}`);
         void this.dedupedFetch(queryKey, ...args);
       }
 
       // Still return stale data immediately.
-      console.log(`Returning stale data for ${queryKey}`);
+      this.log(`Returning stale data for ${queryKey}`);
       return cached.data;
     }
 
@@ -227,7 +232,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
     // De-duplicate in-flight requests
     if (inflightQuery) {
-      console.log(`Deduplicating inflight fetch for ${queryKey}`);
+      this.log(`Deduplicating inflight fetch for ${queryKey}`);
       return inflightQuery.promise;
     }
 
@@ -241,16 +246,16 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   }
 
   private async startFetching(queryKey: string, args: TArgs) {
-    console.log(`Start fetching ${queryKey}`);
+    this.log(`Start fetching ${queryKey}`);
 
     try {
       const data = await this.queryFn(...args);
 
-      console.log(`Successfully fetched ${queryKey}`);
+      this.log(`Successfully fetched ${queryKey}`);
       this.setData(queryKey, data, Date.now());
       return data;
     } catch (e) {
-      console.error(`Failed to fetch ${queryKey}: ${e}`);
+      this.log(`Failed to fetch ${queryKey}: ${e}`);
       throw e;
     } finally {
       this.inflightQueries.delete(queryKey);
@@ -338,7 +343,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       const numToCut = oldSize - this.maxSize;
 
       if (numToCut > 0) {
-        console.log(
+        this.log(
           `enforceSizeLimit for ${this.queryName} needed due to size ${oldSize} > ${this.maxSize}`,
         );
 
@@ -366,7 +371,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       let bytesToCut = currentByteSize - this.maxBytes;
 
       if (bytesToCut > 0) {
-        console.log(
+        this.log(
           `enforceSizeLimit for ${this.queryName} needed due to byte size ${currentByteSize.toLocaleString()} > ${this.maxBytes.toLocaleString()}`,
         );
 
@@ -399,7 +404,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       this.queryState.setValue(newState);
 
       // Log to inform user that the data was trimmed.
-      console.log(
+      this.log(
         `Trimmed data for ${this.queryName}: size=(${oldSize} -> ${Object.keys(newState).length}) (limit=${this.maxSize}), byteSize=(${oldByteSize.toLocaleString()} -> ${getByteSize(newState).toLocaleString()}) (limit=${this.maxBytes.toLocaleString()})`,
       );
 
@@ -407,7 +412,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     }
 
     // Log to indicate why trimming was not needed.
-    console.log(
+    this.log(
       `No need to trim data for ${this.queryName}: size=${oldSize} (limit=${this.maxSize}), byteSize=${oldByteSize.toLocaleString()} (limit=${this.maxBytes.toLocaleString()})`,
     );
   }
@@ -474,7 +479,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
   // The fetch logic wrapped in useCallback to be stable for useEffect
   const execute = useCallback(async () => {
-    console.log(`Begin executing shared query ${queryKey}`);
+    query.log(`Begin executing shared query ${queryKey}`);
 
     setQueryState((prev) => {
       const clone = { ...prev };
