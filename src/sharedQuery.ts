@@ -271,12 +271,22 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     }
   }
 
+  /** Get the entire stored entry for a query key. */
+  public getQueryValue(queryKey: string): QueryStateValue<TData> | undefined {
+    return this.queryState.getSnapshot()?.[queryKey];
+  }
+
+  /** Get the current stored data for a query key. */
+  public getData(queryKey: string): TData | undefined {
+    return this.queryState.getSnapshot()?.[queryKey]?.data;
+  }
+
   /** Set the data directly if the user obtained it from somewhere else. */
-  public async setData(
+  public setData(
     queryKey: string,
     data: TData,
     dataUpdatedMs = Date.now(),
-  ): Promise<void> {
+  ): void {
     const entry: QueryStateValue<TData> = {
       lastUpdatedMs: Date.now(),
       loading: false,
@@ -289,7 +299,10 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     this.enforceSizeLimit();
   }
 
-  /** Do a new fetch even when the data is already cached. */
+  /**
+   * Do a new fetch even when the data is already cached, but don't fetch if
+   * another fetch is already inflight.
+   */
   public async updateFromSource(...args: TArgs): Promise<TData> {
     const key = this.getQueryKey(args);
     return await this.dedupedFetch(key, ...args);
