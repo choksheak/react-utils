@@ -100,11 +100,22 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = {
 
 /** Users can override these values globally. */
 export const SharedQueryDefaults = {
+  // Refetch on every page load.
   staleMs: 0,
+
+  // Keep in cache for a long time.
   expiryMs: 30 * MS_PER_DAY,
+
+  // No default persistence configured.
   persistTo: undefined as PersistTo | undefined,
-  maxSize: 100, // 100 is not too large, but please tweak accordingly
-  maxBytes: 100_000, // 100kb before GC
+
+  // 100 is not too large, but please tweak accordingly.
+  maxSize: 100,
+
+  // 100kb limit before discarding old records.
+  maxBytes: 100_000,
+
+  // Default to log to console.
   log: (...args: unknown[]) => console.log("[sharedQuery]", ...args),
 };
 
