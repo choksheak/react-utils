@@ -188,13 +188,47 @@ export class SharedQuery<TArgs extends unknown[], TData> {
    * using `controller.signal`. So if you need both the controller and the
    * signal, just use this function.
    */
-  public getAbortController(queryKey: string): AbortController | null {
+  public getAbortController(args: TArgs): AbortController | null {
+    const queryKey = this.getQueryKey(args);
+    return this.getAbortControllerByKey(queryKey);
+  }
+
+  public getAbortControllerByKey(queryKey: string): AbortController | null {
     return this.inflightQueries.get(queryKey)?.abortController ?? null;
   }
 
-  /** Get the AbortSignal to check for query abortions. */
-  public getAbortSignal(queryKey: string): AbortSignal | null {
-    return this.getAbortController(queryKey)?.signal ?? null;
+  /**
+   * Get the AbortSignal to check for query abortions.
+   *
+   * Example:
+   * ```
+   *   const getUserQuery = sharedQuery({
+   *     queryName: "getUser",
+   *     queryFn: (userId: string) => {
+   *       // Get the signal for this current execution.
+   *       const signal = getUserQuery.getAbortSignal([userId]);
+   *
+   *       // Pass the signal to fetch so that it can be aborted.
+   *       const response = await fetch(`/users/${userId}`, { signal });
+   *
+   *       // Check for errors.
+   *       if (!response.ok) {
+   *         throw new Error(response.statusText);
+   *       }
+   *
+   *       // Return the data.
+   *       return await response.json();
+   *     },
+   *   });
+   * ```
+   */
+  public getAbortSignal(args: TArgs): AbortSignal | null {
+    const queryKey = this.getQueryKey(args);
+    return this.getAbortSignalByKey(queryKey);
+  }
+
+  public getAbortSignalByKey(queryKey: string): AbortSignal | null {
+    return this.getAbortControllerByKey(queryKey)?.signal ?? null;
   }
 
   private isStale(dataUpdatedMs: number): boolean {
@@ -505,22 +539,35 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     | QueryStateValue<TData>
     | undefined;
 
+  const setQueryStateValue = useCallback(
+    (
+      arg:
+        | QueryStateValue<TData>
+        | ((
+            prev: QueryStateValue<TData> | undefined,
+          ) => QueryStateValue<TData>),
+    ) => {
+      setQueryState((prev) => {
+        const clone = { ...prev };
+        clone[queryKey] =
+          typeof arg === "function" ? arg(clone[queryKey]) : arg;
+        return clone;
+      });
+    },
+    [queryKey, setQueryState],
+  );
+
   // The fetch logic wrapped in useCallback to be stable for useEffect
   const execute = useCallback(
     async (forceRefresh: boolean) => {
       query.log(`Begin executing shared query ${queryKey}`);
 
-      setQueryState((prev) => {
-        const clone = { ...prev };
-
-        clone[queryKey] = {
-          ...(clone[queryKey] ?? {}),
-          lastUpdatedMs: Date.now(),
-          loading: true,
-        };
-
-        return clone;
-      });
+      setQueryStateValue((prev) => ({
+        // Keep old data and error.
+        ...(prev ?? {}),
+        lastUpdatedMs: Date.now(),
+        loading: true,
+      }));
 
       try {
         const data = await (forceRefresh
@@ -528,42 +575,32 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
           : query.getCachedOrFetch(...stableArgs));
 
         if (isMounted.current) {
-          setQueryState((prev) => {
-            const clone = { ...prev };
-            const now = Date.now();
+          const now = Date.now();
 
-            clone[queryKey] = {
-              // Don't keep old error.
-              lastUpdatedMs: now,
-              loading: false,
-              data,
-              dataUpdatedMs: now,
-            };
-
-            return clone;
+          setQueryStateValue({
+            // Don't keep old error.
+            lastUpdatedMs: now,
+            loading: false,
+            data,
+            dataUpdatedMs: now,
           });
         }
       } catch (e) {
         if (isMounted.current) {
-          setQueryState((prev) => {
-            const clone = { ...prev };
-            const now = Date.now();
+          const now = Date.now();
 
-            clone[queryKey] = {
-              // Keep old data.
-              ...(clone[queryKey] ?? {}),
-              lastUpdatedMs: now,
-              loading: false,
-              error: e,
-              errorUpdatedMs: now,
-            };
-
-            return clone;
-          });
+          setQueryStateValue((prev) => ({
+            // Keep old data.
+            ...(prev ?? {}),
+            lastUpdatedMs: now,
+            loading: false,
+            error: e,
+            errorUpdatedMs: now,
+          }));
         }
       }
     },
-    [query, queryKey, setQueryState, stableArgs],
+    [query, queryKey, setQueryStateValue, stableArgs],
   );
 
   useEffect(() => {
@@ -582,8 +619,11 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
     return {
       ...state,
+      // This works only if the user-given queryFn supports abort. If not,
+      // this function doesn't do anything, since we don't have any means to
+      // abort the running queryFn.
       abortCurrentQuery: (reason?: unknown) => {
-        const controller = query.getAbortController(queryKey);
+        const controller = query.getAbortControllerByKey(queryKey);
         controller?.abort(reason);
         return Boolean(controller);
       },
@@ -591,11 +631,29 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         void execute(true);
       },
       setData: (data: TData, dataUpdatedMs?: number) => {
-        query.setData(queryKey, data, dataUpdatedMs ?? Date.now());
+        const now = Date.now();
+        setQueryStateValue((prev) => ({
+          ...(prev ?? {}),
+          data,
+          dataUpdatedMs: dataUpdatedMs ?? now,
+          lastUpdatedMs: now,
+          loading: false,
+        }));
       },
       deleteData: () => {
-        query.deleteData(queryKey);
+        setQueryState((prev) => {
+          const clone = { ...prev };
+          delete clone[queryKey];
+          return clone;
+        });
       },
     };
-  }, [execute, query, queryKey, queryStateValue]);
+  }, [
+    execute,
+    query,
+    queryKey,
+    queryStateValue,
+    setQueryState,
+    setQueryStateValue,
+  ]);
 }
