@@ -1,4 +1,6 @@
 /**
+ * @packageDocumentation
+ *
  * The "shared state" is a React state that shares the same value across the
  * entire app. It is largely similar to the jotai library, but is much smaller
  * and much easier to work with when used for persisting in local storage or
@@ -10,6 +12,8 @@
  *
  * Example:
  * ```
+ *   import { sharedState, useSharedState } from "@choksheak/react-utils/sharedState";
+ *
  *   // Create a new shared state in the top level scope.
  *   // The first argument is the default value, which is required.
  *   // The second argument is an options object, and is optional (defaults
@@ -34,8 +38,6 @@
  *     ...
  *   };
  * ```
- *
- * @packageDocumentation
  */
 
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";

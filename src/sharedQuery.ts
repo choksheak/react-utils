@@ -1,4 +1,6 @@
 /**
+ * @packageDocumentation
+ *
  * The "shared query" is a data fetching convenience library that helps users
  * to load data, check for staleness and expiration, cache in memory, local
  * storage or indexed db, and be able to manipulate the data anytime.
@@ -11,6 +13,8 @@
  *
  * Example:
  * ```
+ *   import { sharedQuery, useSharedQuery } from "@choksheak/react-utils/sharedQuery";
+ *
  *   // Create a new shared query in the top level scope.
  *   // The query function `queryFn` here does not take any arguments.
  *   //
@@ -76,8 +80,6 @@
  *      return <>User: {user.data ? JSON.stringify(user.data) : "-"}</>;
  *   };
  * ```
- *
- * @packageDocumentation
  */
 
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
