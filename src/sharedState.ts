@@ -1,12 +1,3 @@
-import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
-import { useSyncExternalStore } from "react";
-
-import {
-  getStorageAdapter,
-  StorageAdapter,
-  StorageOptions,
-} from "./utils/storage";
-
 /**
  * The "shared state" is a React state that shares the same value across the
  * entire app. It is largely similar to the jotai library, but is much smaller
@@ -17,6 +8,15 @@ import {
  * efficient implementation of shared global React states with seamless support
  * for client persistence.
  */
+
+import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
+import { useSyncExternalStore } from "react";
+
+import {
+  getStorageAdapter,
+  StorageAdapter,
+  StorageOptions,
+} from "./utils/storage";
 
 /************************************************************************/
 /* Global config                                                        */
