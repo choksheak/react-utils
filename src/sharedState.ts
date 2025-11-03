@@ -7,6 +7,8 @@
  * This library aims to be the shortest, simplest, easiest to use, and most
  * efficient implementation of shared global React states with seamless support
  * for client persistence.
+ *
+ * @packageDocumentation
  */
 
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";

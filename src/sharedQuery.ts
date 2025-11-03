@@ -1,3 +1,17 @@
+/**
+ * The "shared query" is a data fetching convenience library that helps users
+ * to load data, check for staleness and expiration, cache in memory, local
+ * storage or indexed db, and be able to manipulate the data anytime.
+ *
+ * Each shared query creates a new private shared state that handles the data
+ * storage. This shared state contains the records for all queries, where each
+ * query is a unique set of arguments used to make the query. The number of
+ * records and the total byte size of data can be limited so as to ensure the
+ * query does not take up too much memory.
+ *
+ * @packageDocumentation
+ */
+
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
 import getByteSize from "object-sizeof";
 import { useCallback, useEffect, useMemo, useRef } from "react";
