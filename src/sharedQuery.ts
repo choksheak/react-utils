@@ -9,6 +9,74 @@
  * records and the total byte size of data can be limited so as to ensure the
  * query does not take up too much memory.
  *
+ * Example:
+ * ```
+ *   // Create a new shared query in the top level scope.
+ *   // The query function `queryFn` here does not take any arguments.
+ *   //
+ *   // Only the queryName and queryFn are required and everything else is
+ *   // optional.
+ *   //
+ *   // The queryName must be unique, otherwise we will throw an
+ *   // error. This is because defining the same queryName for two different
+ *   // queries implies that the queries are the same, thus violating the idea
+ *   // of a "shared" query, and almost certainly points to a bug in the code.
+ *   export const usersQuery = sharedQuery({
+ *     queryName: "users",
+ *     queryFn: listUsers,
+ *     persistTo: "indexedDb",
+ *     staleMs: MS_PER_DAY,
+ *   });
+ *
+ *   // Note that the query will only start fetching on mount in React.
+ *   // But you can do `usersQuery.getCachedOrFetch()` here to prefetch the
+ *   // data if necessary.
+ *   usersQuery.getCachedOrFetch();
+ *
+ *   // Example of using a query function with arguments.
+ *   export const getUserQuery = sharedQuery({
+ *     queryName: "getUser",
+ *     queryFn: getUser, // getUser(userId: string) => User
+ *     persistTo: "indexedDb",
+ *     staleMs: MS_PER_DAY,
+ *   });
+ *
+ *   export const UsersComponent: React.FC = () => {
+ *     // Second argument is optional, and is an array of arguments to be
+ *     // passed to the `queryFn`.
+ *     const users = useSharedQuery(usersQuery);
+ *
+ *     return (
+ *       <>
+ *         <h1>List of Users</h1>
+ *
+ *         <button onclick={users.refetch}>Refresh</button>
+ *
+ *         {users.loading && <Loader />}
+ *
+ *         {users.error && !users.data && <p>Error: {String(users.error)}</p>}
+ *
+ *         <p>Data: {users.data ? JSON.stringify(users.data) : "-"}</p>
+ *       </>
+ *     );
+ *   };
+ *
+ *   export const AnotherComponent: React.FC = () => {
+ *      // This query will be deduped with the one above, sharing the same
+ *      // data and the same fetches.
+ *      const users = useSharedQuery(usersQuery);
+ *      ...
+ *   };
+ *
+ *   export const DisplayOneUser: React.FC<{userId: string}> = ({userId}) => {
+ *      // Example of using the query with an argument. Whenever the argument
+ *      // changes, the data will be fetched and updated automatically.
+ *      const user = useSharedQuery(getUserQuery, [userId]);
+ *
+ *      return <>User: {user.data ? JSON.stringify(user.data) : "-"}</>;
+ *   };
+ * ```
+ *
  * @packageDocumentation
  */
 

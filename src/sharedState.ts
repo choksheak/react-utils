@@ -8,6 +8,33 @@
  * efficient implementation of shared global React states with seamless support
  * for client persistence.
  *
+ * Example:
+ * ```
+ *   // Create a new shared state in the top level scope.
+ *   // The first argument is the default value, which is required.
+ *   // The second argument is an options object, and is optional (defaults
+ *   // to storing in memory only without any persistence).
+ *   const usersState = sharedState([], { indexedDbKey: "users" });
+ *
+ *   export const UsersComponent: React.FC = () => {
+ *     // Get both the value and the setter.
+ *     const [users, setUsers] = useSharedState(usersState);
+ *     ...
+ *   };
+ *
+ *   export const ReadOnlyComponent: React.FC = () => {
+ *     // Get the value only.
+ *     const users = useSharedStateValue(usersState);
+ *     ...
+ *   };
+ *
+ *   export const WriteOnlyComponent: React.FC = () => {
+ *     // Get the setter only.
+ *     const setUsers = useSharedStateSetter(usersState);
+ *     ...
+ *   };
+ * ```
+ *
  * @packageDocumentation
  */
 
