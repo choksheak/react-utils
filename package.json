@@ -4,9 +4,6 @@
   "version": "0.2.5",
   "description": "Miscellaneous React+TypeScript utilities with support for full tree-shaking.",
   "private": false,
-  "main": "index.js",
-  "module": "index.mjs",
-  "types": "index.d.ts",
   "files": [
     "**/*"
   ],
