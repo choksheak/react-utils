@@ -41,7 +41,7 @@
  */
 
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
-import { useSyncExternalStore } from "react";
+import { Dispatch, SetStateAction, useSyncExternalStore } from "react";
 
 import {
   getStorageAdapter,
@@ -153,7 +153,7 @@ let stateKey = 0;
 export class SharedState<T> {
   private readonly pubSubKey: string;
   private readonly storageAdapter: StorageAdapter<T> | null;
-  public readonly setValueBounded: (next: T | ((prev: T) => T)) => void;
+  public readonly setValueBounded: Dispatch<SetStateAction<T>>;
   public initDone = false;
 
   public constructor(
@@ -169,7 +169,9 @@ export class SharedState<T> {
     );
 
     // Same as this.setValue, but binding the `this` reference.
-    this.setValueBounded = (arg) => this.setValue(arg);
+    this.setValueBounded = (next: SetStateAction<T>) => {
+      this.setValue(next);
+    };
 
     // Always set the default value first to avoid returning undefineds if that
     // is not part of T.
@@ -196,7 +198,7 @@ export class SharedState<T> {
   }
 
   // Set the value of the shared state.
-  public setValue(next: T | ((prev: T) => T)): void {
+  public setValue(next: SetStateAction<T>): void {
     if (typeof next === "function") {
       const prev = pubSubStore.get<T>(this.pubSubKey);
       next = (next as (p: T) => T)(prev);
@@ -248,7 +250,7 @@ export function sharedState<T>(
  */
 export function useSharedState<T>(
   state: SharedState<T>,
-): [T, (next: T | ((prev: T) => T)) => void] {
+): [T, Dispatch<SetStateAction<T>>] {
   state.initDefaultValueOnce();
 
   const value = useSyncExternalStore(

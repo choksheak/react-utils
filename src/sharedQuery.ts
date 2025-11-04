@@ -84,7 +84,7 @@
 
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
 import getByteSize from "object-sizeof";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { SetStateAction, useCallback, useEffect, useMemo, useRef } from "react";
 
 import {
   SharedState,
@@ -503,107 +503,71 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
     const oldByteSize = getByteSize(oldState);
 
-    let newState = oldState;
-    let needUpdate = false;
+    let numToCut = this.maxSize ? oldSize - this.maxSize : 0;
+    let bytesToCut = this.maxBytes ? oldByteSize - this.maxBytes : 0;
 
-    // Limit by number of records.
-    if (this.maxSize) {
-      let numToCut = oldSize - this.maxSize;
-
-      if (numToCut > 0) {
-        this.log(
-          `enforceSizeLimit for ${this.queryName} needed due to size ${oldSize} > ${this.maxSize}`,
-        );
-
-        newState = { ...newState }; // shallow clone
-        needUpdate = true;
-
-        const entriesByTimeAscending = Object.entries(newState).sort(
-          (entry1, entry2) =>
-            // Sort descending.
-            entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
-        );
-
-        for (
-          let i = 0;
-          i < entriesByTimeAscending.length && numToCut > 0;
-          i++
-        ) {
-          const key = entriesByTimeAscending[i][0];
-
-          // Mounted keys cannot be cleaned up as they are visible in the UI.
-          if (this.mountedKeys.has(key)) {
-            this.log(`Cannot clean up ${key} as it is mounted`);
-          } else {
-            this.log(`Cleaning up unmounted ${key}`);
-            delete newState[key];
-            numToCut--;
-          }
-        }
-      }
-    }
-
-    // Limit by byte size.
-    if (this.maxBytes && Object.keys(newState).length > 1) {
-      // Recompute only if changed by above code.
-      const currentByteSize = needUpdate ? getByteSize(newState) : oldByteSize;
-
-      let bytesToCut = currentByteSize - this.maxBytes;
-
-      if (bytesToCut > 0) {
-        this.log(
-          `enforceSizeLimit for ${this.queryName} needed due to byte size ${currentByteSize.toLocaleString()} > ${this.maxBytes.toLocaleString()}`,
-        );
-
-        // Shallow clone only if not already cloned above.
-        if (!needUpdate) {
-          newState = { ...newState };
-          needUpdate = true;
-        }
-
-        const entriesByTimeAscending = Object.entries(newState).sort(
-          (entry1, entry2) => entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
-        );
-
-        for (
-          let i = 0;
-          i < entriesByTimeAscending.length && bytesToCut > 0;
-          i++
-        ) {
-          const key = entriesByTimeAscending[i][0];
-
-          // Mounted keys cannot be cleaned up as they are visible in the UI.
-          if (this.mountedKeys.has(key)) {
-            this.log(`Cannot clean up ${key} as it is mounted`);
-          } else {
-            this.log(`Cleaning up unmounted ${key}`);
-            const thisSize = getByteSize(key) + getByteSize(newState[key]);
-            delete newState[key];
-            bytesToCut -= thisSize;
-          }
-        }
-      }
-    }
-
-    // Update the state.
-    if (needUpdate) {
-      this.queryState.setValue(newState);
-
-      // Log to inform user that the data was trimmed.
+    // Log to indicate why trimming was not needed.
+    if (numToCut <= 0 && bytesToCut <= 0) {
       this.log(
-        `Trimmed data for ${this.queryName}: size=(${oldSize} -> ${Object.keys(newState).length}) (limit=${this.maxSize}), byteSize=(${oldByteSize.toLocaleString()} -> ${getByteSize(newState).toLocaleString()}) (limit=${this.maxBytes.toLocaleString()})`,
+        `No need to trim data for ${this.queryName}: size=${oldSize} (limit=${this.maxSize}), byteSize=${oldByteSize.toLocaleString()} (limit=${this.maxBytes.toLocaleString()})`,
       );
-
       return;
     }
 
-    // Log to indicate why trimming was not needed.
+    // Log to inform user that trimming is needed.
     this.log(
-      `No need to trim data for ${this.queryName}: size=${oldSize} (limit=${this.maxSize}), byteSize=${oldByteSize.toLocaleString()} (limit=${this.maxBytes.toLocaleString()})`,
+      `Need to trim ${this.queryName}: numToCut=${numToCut}, bytesToCut=${bytesToCut}`,
+    );
+
+    const newState = { ...oldState }; // shallow clone
+    let needUpdate = false;
+
+    const entriesByTimeAscending = Object.entries(newState).sort(
+      (entry1, entry2) => entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
+    );
+
+    for (const [key] of entriesByTimeAscending) {
+      // Mounted keys cannot be cleaned up as they are visible in the UI.
+      if (this.mountedKeys.has(key)) {
+        this.log(`Cannot clean up ${key} as it is mounted`);
+        continue;
+      }
+
+      const byteSize = getByteSize(key) + getByteSize(newState[key]);
+      this.log(
+        `Cleaning up unmounted ${key} (byteSize=${byteSize.toLocaleString()})`,
+      );
+
+      numToCut--;
+      bytesToCut -= byteSize;
+
+      delete newState[key];
+      needUpdate = true;
+
+      if (numToCut <= 0 && bytesToCut <= 0) {
+        break;
+      }
+    }
+
+    // Log to indicate why trimming was not needed.
+    if (!needUpdate) {
+      this.log(
+        `No trimmable entries found for ${this.queryName}: size=${oldSize} (limit=${this.maxSize}), byteSize=${oldByteSize.toLocaleString()} (limit=${this.maxBytes.toLocaleString()})`,
+      );
+      return;
+    }
+
+    // Update the state.
+    this.queryState.setValue(newState);
+
+    // Log to inform user that the data was trimmed.
+    this.log(
+      `Trimmed data for ${this.queryName}: size=[${oldSize} -> ${Object.keys(newState).length}] (limit=${this.maxSize}), byteSize=[${oldByteSize.toLocaleString()} -> ${getByteSize(newState).toLocaleString()}] (limit=${this.maxBytes.toLocaleString()})`,
     );
   }
 }
 
+// Disallow duplicate query names.
 const seenQueryNames = new Set<string>();
 
 /**
@@ -672,17 +636,11 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     | undefined;
 
   const setQueryStateValue = useCallback(
-    (
-      arg:
-        | QueryStateValue<TData>
-        | ((
-            prev: QueryStateValue<TData> | undefined,
-          ) => QueryStateValue<TData>),
-    ) => {
+    (next: SetStateAction<QueryStateValue<TData>>) => {
       setQueryState((prev) => {
         const clone = { ...prev };
         clone[queryKey] =
-          typeof arg === "function" ? arg(clone[queryKey]) : arg;
+          typeof next === "function" ? next(clone[queryKey]) : next;
         return clone;
       });
     },
