@@ -84,7 +84,14 @@
 
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
 import getByteSize from "object-sizeof";
-import { SetStateAction, useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   SharedState,
@@ -101,7 +108,7 @@ export type QueryFn<TArgs extends unknown[], TData> = (
 ) => Promise<TData> | TData;
 
 /** An entry for a persisted state corresponding to one query key. */
-export type QueryStateValue<TData> = {
+export type QueryStateValue<TData> = Readonly<{
   /**
    * When this record was last updated. Used for LRU determination. If you want
    * the data age, please use `dataUpdatedMs` instead.
@@ -120,28 +127,35 @@ export type QueryStateValue<TData> = {
   error?: unknown;
 
   errorUpdatedMs?: number;
-};
+}>;
 
 /** Return type for useSharedQuery(). */
-export type UseQueryResult<TData> = QueryStateValue<TData> & {
-  /**
-   * Cancels the inflight query (if any). Returns true if canceled.
-   */
-  abortCurrentQuery: (reason?: unknown) => boolean;
+export type UseQueryResult<TData> = QueryStateValue<TData> &
+  Readonly<{
+    /**
+     * Return the last non-empty data if you want to display the last loaded data
+     * while waiting for the new data to load.
+     */
+    lastNonEmptyData: TData | undefined;
 
-  /**
-   * Manually refresh the data by doing a new query.
-   */
-  refetch: () => void;
+    /**
+     * Cancels the inflight query (if any). Returns true if canceled.
+     */
+    abortCurrentQuery: (reason?: unknown) => boolean;
 
-  /**
-   * If you got the data from somewhere else (e.g. an in-memory data update),
-   * just set it directly.
-   */
-  setData: (data: TData, dataUpdatedMs?: number) => void;
+    /**
+     * Manually refresh the data by doing a new query.
+     */
+    refetch: () => void;
 
-  deleteData: () => void;
-};
+    /**
+     * If you got the data from somewhere else (e.g. an in-memory data update),
+     * just set it directly.
+     */
+    setData: (data: TData, dataUpdatedMs?: number) => void;
+
+    deleteData: () => void;
+  }>;
 
 /** List of all available persistence options. */
 export type PersistTo = "localStorage" | "indexedDb";
@@ -600,7 +614,9 @@ export function sharedQuery<TArgs extends unknown[], TData>(
   return new SharedQuery(options);
 }
 
-const DEFAULT_QUERY_STATE_ENTRY: QueryStateValue<unknown> = {
+// Using any so that we don't need to typecast later.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const DEFAULT_QUERY_STATE_ENTRY: Readonly<QueryStateValue<any>> = {
   lastUpdatedMs: 0,
   loading: true,
 };
@@ -630,22 +646,33 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     [query, stableArgs],
   );
 
-  // Make sure typechecker knows this could be undefined.
-  const queryStateValue = queryState[queryKey] as
-    | QueryStateValue<TData>
-    | undefined;
+  // Init with empty object.
+  const queryStateValue: QueryStateValue<TData> =
+    queryState[queryKey] ?? DEFAULT_QUERY_STATE_ENTRY;
 
   const setQueryStateValue = useCallback(
     (next: SetStateAction<QueryStateValue<TData>>) => {
       setQueryState((prev) => {
         const clone = { ...prev };
         clone[queryKey] =
-          typeof next === "function" ? next(clone[queryKey]) : next;
+          typeof next === "function"
+            ? next(clone[queryKey] ?? DEFAULT_QUERY_STATE_ENTRY)
+            : next;
         return clone;
       });
     },
     [queryKey, setQueryState],
   );
+
+  // Keep the last non-empty data loaded in case you want to show a placeholder
+  // during new loads.
+  const [lastNonEmptyData, setLastNonEmptyData] = useState<TData | undefined>();
+
+  useEffect(() => {
+    if (queryStateValue.data !== undefined) {
+      setLastNonEmptyData(queryStateValue.data);
+    }
+  }, [queryStateValue.data]);
 
   // The fetch logic wrapped in useCallback to be stable for useEffect
   const execute = useCallback(
@@ -654,7 +681,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
       setQueryStateValue((prev) => ({
         // Keep old data and error.
-        ...(prev ?? {}),
+        ...prev,
         lastUpdatedMs: Date.now(),
         loading: true,
       }));
@@ -681,7 +708,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
           setQueryStateValue((prev) => ({
             // Keep old data.
-            ...(prev ?? {}),
+            ...prev,
             lastUpdatedMs: now,
             loading: false,
             error: e,
@@ -706,11 +733,9 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
   }, [execute, query, queryKey]);
 
   return useMemo(() => {
-    const state =
-      queryStateValue ?? (DEFAULT_QUERY_STATE_ENTRY as QueryStateValue<TData>);
-
     return {
-      ...state,
+      ...queryStateValue,
+      lastNonEmptyData,
       // This works only if the user-given queryFn supports abort. If not,
       // this function doesn't do anything, since we don't have any means to
       // abort the running queryFn.
@@ -725,7 +750,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
       setData: (data: TData, dataUpdatedMs?: number) => {
         const now = Date.now();
         setQueryStateValue((prev) => ({
-          ...(prev ?? {}),
+          ...prev,
           data,
           dataUpdatedMs: dataUpdatedMs ?? now,
           lastUpdatedMs: now,
@@ -739,9 +764,10 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
           return clone;
         });
       },
-    };
+    } satisfies UseQueryResult<TData>;
   }, [
     execute,
+    lastNonEmptyData,
     query,
     queryKey,
     queryStateValue,
