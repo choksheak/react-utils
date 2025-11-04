@@ -168,62 +168,87 @@ export type SharedQueryState<TData> = Record<string, QueryStateValue<TData>>;
 
 /** Options to configure a shared query. */
 export type SharedQueryOptions<TArgs extends unknown[], TData> = {
-  // The name could have been auto-generated, but we let the user give us a
-  // human-readable name that can be identified quickly in the logs.
-  // Note that the queryKey is a string formed by the queryName plus the query
-  // arguments.
+  /**
+   * The name could have been auto-generated, but we let the user give us a
+   * human-readable name that can be identified quickly in the logs.
+   * Note that the queryKey is a string formed by the queryName plus the query
+   * arguments.
+   */
   queryName: string;
 
-  // Function to fetch data.
+  /**
+   * Function to fetch data.
+   */
   queryFn: QueryFn<TArgs, TData>;
 
-  // ms before data considered stale; 0 means always stale.
+  /**
+   * ms before data considered stale; 0 means always stale.
+   */
   staleMs?: number;
 
-  // ms before data is removed from cache; 0 means never expire.
+  /**
+   * ms before data is removed from cache; 0 means never expire.
+   */
   expiryMs?: number;
 
-  // Trigger background re-fetch if stale.
+  /**
+   * Trigger background re-fetch if stale.
+   */
   refetchOnStale?: boolean;
 
-  // Shortcut to set the localStorageKey or indexedDbKey automatically from
-  // queryName. This is important because it avoids requiring the user to
-  // specify the same queryName twice everytime.
+  /**
+   * Shortcut to set the localStorageKey or indexedDbKey automatically from
+   * queryName. This is important because it avoids requiring the user to
+   * specify the same queryName twice everytime.
+   */
   persistTo?: PersistTo;
 
-  // Max number of entries to keep. The oldest entries will be discarded.
-  // The last record cannot be discarded. 0 means no limit.
+  /**
+   * Max number of entries to keep. The oldest entries will be discarded.
+   * The last record cannot be discarded. 0 means no limit.
+   */
   maxSize?: number;
 
-  // Max number of bytes to keep. The oldest entries will be discarded.
-  // The last record cannot be discarded. 0 means no limit.
+  /**
+   * Max number of bytes to keep. The oldest entries will be discarded.
+   * The last record cannot be discarded. 0 means no limit.
+   */
   maxBytes?: number;
 
-  // Customize the logger.
+  /**
+   * Keep a copy of the last non-empty data so that when you change the
+   * query arguments, you can still display the old data while waiting for the
+   * new data to load.
+   */
+  keepLastNonEmptyData?: boolean;
+
+  /**
+   * Customize the logger.
+   */
   log?: (...args: unknown[]) => void;
 } & SharedStateOptions<SharedQueryState<TData>>;
 
 /** Users can override these values globally. */
 export const SharedQueryDefaults = {
-  // Refetch on every page load.
+  /** Refetch on every page load. */
   staleMs: 0,
 
-  // Keep in cache for a long time.
+  /** Keep in cache for a long time. */
   expiryMs: 30 * MS_PER_DAY,
 
-  // Always refetch automatically if the data is stale.
+  /** Always refetch automatically if the data is stale. */
   refetchOnStale: true,
 
-  // No default persistence configured.
+  /** No default persistence configured. */
   persistTo: undefined as PersistTo | undefined,
 
-  // 100 is not too large, but please tweak accordingly.
+  /** 100 is not too large, but please tweak accordingly. */
   maxSize: 100,
 
-  // 100kb limit before discarding old records.
+  /** 100kb limit before discarding old records. */
   maxBytes: 100_000,
 
-  // Default to log to console.
+  /** Default to log to console. */
   log: (...args: unknown[]) => console.log("[sharedQuery]", ...args),
 };
 
@@ -250,6 +275,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   public readonly refetchOnStale: boolean;
   public readonly maxSize: number;
   public readonly maxBytes: number;
+  public readonly keepLastNonEmptyData: boolean;
   public readonly log: (...args: unknown[]) => void;
 
   public constructor(options: SharedQueryOptions<TArgs, TData>) {
@@ -276,6 +302,8 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
     this.maxSize = options?.maxSize ?? SharedQueryDefaults.maxSize;
     this.maxBytes = options?.maxBytes ?? SharedQueryDefaults.maxBytes;
+
+    this.keepLastNonEmptyData = Boolean(options?.keepLastNonEmptyData);
 
     this.log = options?.log ?? SharedQueryDefaults.log;
 
@@ -669,10 +697,10 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
   const [lastNonEmptyData, setLastNonEmptyData] = useState<TData | undefined>();
 
   useEffect(() => {
-    if (queryStateValue.data !== undefined) {
+    if (query.keepLastNonEmptyData && queryStateValue.data !== undefined) {
       setLastNonEmptyData(queryStateValue.data);
     }
-  }, [queryStateValue.data]);
+  }, [query.keepLastNonEmptyData, queryStateValue.data]);
 
   // The fetch logic wrapped in useCallback to be stable for useEffect
   const execute = useCallback(
