@@ -222,6 +222,13 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
   public readonly queryState: SharedState<SharedQueryState<TData>>;
 
+  /**
+   * Keep track of the mounted query keys. This handles the case where an
+   * earlier-started query returns later, and when it returns, it was already
+   * unmounted, thus making it eligible for clean up right after fetch.
+   */
+  private readonly mountedKeys = new Map<string, number>();
+
   public readonly queryName: string;
   private readonly queryFn: QueryFn<TArgs, TData>;
   public readonly expiryMs: number;
@@ -461,6 +468,21 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     this.inflightQueries.clear();
   }
 
+  /** Keep track of mounted keys. */
+  public mount(queryKey: string): void {
+    this.mountedKeys.set(queryKey, (this.mountedKeys.get(queryKey) ?? 0) + 1);
+  }
+
+  /** Clean up mounted keys. */
+  public unmount(queryKey: string): void {
+    const count = this.mountedKeys.get(queryKey);
+    if (count === 1) {
+      this.mountedKeys.delete(queryKey);
+    } else {
+      this.mountedKeys.set(queryKey, (count ?? 0) - 1);
+    }
+  }
+
   /**
    * Discard the oldest entries if the size exceeds the limit. The last
    * remaining record cannot be deleted no matter what the limit is.
@@ -486,7 +508,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
     // Limit by number of records.
     if (this.maxSize) {
-      const numToCut = oldSize - this.maxSize;
+      let numToCut = oldSize - this.maxSize;
 
       if (numToCut > 0) {
         this.log(
@@ -496,16 +518,28 @@ export class SharedQuery<TArgs extends unknown[], TData> {
         newState = { ...newState }; // shallow clone
         needUpdate = true;
 
-        Object.entries(newState)
-          .sort(
-            (entry1, entry2) =>
-              // Sort descending.
-              entry2[1].lastUpdatedMs - entry1[1].lastUpdatedMs,
-          )
-          .slice(-numToCut)
-          .forEach(([key]) => {
+        const entriesByTimeAscending = Object.entries(newState).sort(
+          (entry1, entry2) =>
+            // Sort descending.
+            entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
+        );
+
+        for (
+          let i = 0;
+          i < entriesByTimeAscending.length && numToCut > 0;
+          i++
+        ) {
+          const key = entriesByTimeAscending[i][0];
+
+          // Mounted keys cannot be cleaned up as they are visible in the UI.
+          if (this.mountedKeys.has(key)) {
+            this.log(`Cannot clean up ${key} as it is mounted`);
+          } else {
+            this.log(`Cleaning up unmounted ${key}`);
             delete newState[key];
-          });
+            numToCut--;
+          }
+        }
       }
     }
 
@@ -533,14 +567,20 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
         for (
           let i = 0;
-          // Leave the last record entriesByTimeAscending[len-1] untouched.
-          i < entriesByTimeAscending.length - 1 && bytesToCut > 0;
+          i < entriesByTimeAscending.length && bytesToCut > 0;
           i++
         ) {
           const key = entriesByTimeAscending[i][0];
-          const thisSize = getByteSize(key) + getByteSize(newState[key]);
-          delete newState[key];
-          bytesToCut -= thisSize;
+
+          // Mounted keys cannot be cleaned up as they are visible in the UI.
+          if (this.mountedKeys.has(key)) {
+            this.log(`Cannot clean up ${key} as it is mounted`);
+          } else {
+            this.log(`Cleaning up unmounted ${key}`);
+            const thisSize = getByteSize(key) + getByteSize(newState[key]);
+            delete newState[key];
+            bytesToCut -= thisSize;
+          }
         }
       }
     }
@@ -697,13 +737,15 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
   useEffect(() => {
     isMounted.current = true;
+    query.mount(queryKey);
 
     void execute(false);
 
     return () => {
       isMounted.current = false;
+      query.unmount(queryKey);
     };
-  }, [execute]);
+  }, [execute, query, queryKey]);
 
   return useMemo(() => {
     const state =
