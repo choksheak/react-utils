@@ -142,12 +142,14 @@ const pubSubStore = new PubSubStore();
 
 const STORAGE_KEY = "state";
 
+/** Options to configure a shared state. */
 export type SharedStateOptions<T> = {
   lazyLoad?: boolean;
 } & StorageOptions<T>;
 
 let stateKey = 0;
 
+/** Please use sharedState() instead. */
 export class SharedState<T> {
   private readonly pubSubKey: string;
   private readonly storageAdapter: StorageAdapter<T> | null;
@@ -224,7 +226,10 @@ export class SharedState<T> {
 /**
  * Create a new shared state object. Put this code at the top level scope:
  *
- *   const myState = sharedState<number>(0);
+ * Example:
+ * ```
+ *   const counterState = sharedState<number>(0);
+ * ```
  */
 export function sharedState<T>(
   defaultValue: T,
@@ -235,7 +240,11 @@ export function sharedState<T>(
 
 /**
  * React hook for subscribing to a key in the global store.
- *   const [my, setMy] = useSharedState(myState);
+ *
+ * Example:
+ * ```
+ *   const [counter, setCounter] = useSharedState(counterState);
+ * ```
  */
 export function useSharedState<T>(
   state: SharedState<T>,
@@ -252,12 +261,26 @@ export function useSharedState<T>(
   return [value, state.setValueBounded];
 }
 
-/** E.g. const my = useSharedStateValue(myState) */
+/**
+ * Same as useSharedState(), but returns the value only.
+ *
+ * Example:
+ * ```
+ *   const counter = useSharedStateValue(counterState);
+ * ```
+ */
 export function useSharedStateValue<T>(state: SharedState<T>) {
   return useSharedState(state)[0];
 }
 
-/** E.g. const setMy = useSharedStateSetter(myState) */
+/**
+ * Same as useSharedState(), but returns the setter only.
+ *
+ * Example:
+ * ```
+ *   const setCounter = useSharedStateSetter(counterState);
+ * ```
+ */
 export function useSharedStateSetter<T>(state: SharedState<T>) {
   return useSharedState(state)[1];
 }

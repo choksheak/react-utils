@@ -95,10 +95,12 @@ import {
 import { stringifyDeterministicForKeys } from "./utils/stringify";
 import { useDeepMemo } from "./utils/useDeepMemo";
 
+/** Type of the queryFn used to fetch the data from source. */
 export type QueryFn<TArgs extends unknown[], TData> = (
   ...args: TArgs
 ) => Promise<TData> | TData;
 
+/** An entry for a persisted state corresponding to one query key. */
 export type QueryStateValue<TData> = {
   /**
    * When this record was last updated. Used for LRU determination. If you want
@@ -120,6 +122,7 @@ export type QueryStateValue<TData> = {
   errorUpdatedMs?: number;
 };
 
+/** Return type for useSharedQuery(). */
 export type UseQueryResult<TData> = QueryStateValue<TData> & {
   /**
    * Cancels the inflight query (if any). Returns true if canceled.
@@ -140,6 +143,7 @@ export type UseQueryResult<TData> = QueryStateValue<TData> & {
   deleteData: () => void;
 };
 
+/** List of all available persistence options. */
 export type PersistTo = "localStorage" | "indexedDb";
 
 /**
@@ -148,9 +152,12 @@ export type PersistTo = "localStorage" | "indexedDb";
  */
 export type SharedQueryState<TData> = Record<string, QueryStateValue<TData>>;
 
+/** Options to configure a shared query. */
 export type SharedQueryOptions<TArgs extends unknown[], TData> = {
   // The name could have been auto-generated, but we let the user give us a
   // human-readable name that can be identified quickly in the logs.
+  // Note that the queryKey is a string formed by the queryName plus the query
+  // arguments.
   queryName: string;
 
   // Function to fetch data.
@@ -206,6 +213,7 @@ export const SharedQueryDefaults = {
   log: (...args: unknown[]) => console.log("[sharedQuery]", ...args),
 };
 
+/** Please use sharedQuery() instead. */
 export class SharedQuery<TArgs extends unknown[], TData> {
   private readonly inflightQueries = new Map<
     string,
