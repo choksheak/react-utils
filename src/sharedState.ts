@@ -40,10 +40,11 @@
  * ```
  */
 
+import { StorageAdapter } from "@choksheak/ts-utils/storageAdapter";
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
 import { Dispatch, SetStateAction, useSyncExternalStore } from "react";
 
-import { getStorageAdapter, StorageAdapter, StorageOptions } from "./storage";
+import { getStorageAdapter, StorageOptions } from "./storage";
 
 /************************************************************************/
 /* Global config                                                        */
@@ -52,7 +53,7 @@ import { getStorageAdapter, StorageAdapter, StorageOptions } from "./storage";
 /**
  * These values are configurable by the user at any time.
  */
-export const SharedStateDefaults = {
+export const SharedStateConfig = {
   /**
    * Default duration for storage expiration in milliseconds. Initial value
    * is 30 days, but can be changed to anything.
@@ -65,6 +66,13 @@ export const SharedStateDefaults = {
    */
   lazyLoad: false,
 };
+
+export type SharedStateConfig = typeof SharedStateConfig;
+
+/** Convenience function to update global defaults. */
+export function configureSharedState(config: Partial<SharedStateConfig>) {
+  Object.assign(SharedStateConfig, config);
+}
 
 /************************************************************************/
 /* Shared state implementation                                          */
@@ -161,7 +169,7 @@ export class SharedState<T> {
     // Use max of 1 storage adapter per shared state.
     this.storageAdapter = getStorageAdapter(
       options,
-      SharedStateDefaults.storeExpiryMs,
+      SharedStateConfig.storeExpiryMs,
     );
 
     // Same as this.setValue, but binding the `this` reference.
@@ -174,8 +182,7 @@ export class SharedState<T> {
     pubSubStore.setNoNotify(this.pubSubKey, defaultValue);
 
     const lazyLoad = options?.lazyLoad;
-    const lazy =
-      lazyLoad !== undefined ? lazyLoad : SharedStateDefaults.lazyLoad;
+    const lazy = lazyLoad !== undefined ? lazyLoad : SharedStateConfig.lazyLoad;
 
     if (!lazy) {
       void this.initDefaultValueOnce();

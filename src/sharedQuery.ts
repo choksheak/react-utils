@@ -229,7 +229,7 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = {
 } & SharedStateOptions<SharedQueryState<TData>>;
 
 /** Users can override these values globally. */
-export const SharedQueryDefaults = {
+export const SharedQueryConfig = {
   /** Refetch on every page load. */
   staleMs: 0,
 
@@ -251,6 +251,13 @@ export const SharedQueryDefaults = {
   /** Default to log to console. */
   log: (...args: unknown[]) => console.log("[sharedQuery]", ...args),
 };
+
+export type SharedQueryConfig = typeof SharedQueryConfig;
+
+/** Convenience function to update global defaults. */
+export function configureSharedQuery(config: Partial<SharedQueryConfig>) {
+  Object.assign(SharedQueryConfig, config);
+}
 
 /** Please use sharedQuery() instead. */
 export class SharedQuery<TArgs extends unknown[], TData> {
@@ -282,16 +289,16 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     this.queryName = options.queryName;
     this.queryFn = options.queryFn;
 
-    this.staleMs = options?.staleMs ?? SharedQueryDefaults.staleMs;
-    this.expiryMs = options?.expiryMs ?? SharedQueryDefaults.expiryMs;
+    this.staleMs = options?.staleMs ?? SharedQueryConfig.staleMs;
+    this.expiryMs = options?.expiryMs ?? SharedQueryConfig.expiryMs;
 
     this.refetchOnStale =
-      options?.refetchOnStale ?? SharedQueryDefaults.refetchOnStale;
+      options?.refetchOnStale ?? SharedQueryConfig.refetchOnStale;
 
     // Apply shortcut when using `persistTo`.
     // Specifying the storage keys will take precedence over `persistTo`.
     if (!options.localStorageKey && !options.indexedDbKey) {
-      const persistTo = options.persistTo ?? SharedQueryDefaults.persistTo;
+      const persistTo = options.persistTo ?? SharedQueryConfig.persistTo;
 
       if (persistTo === "localStorage") {
         options.localStorageKey = options.queryName;
@@ -300,12 +307,12 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       }
     }
 
-    this.maxSize = options?.maxSize ?? SharedQueryDefaults.maxSize;
-    this.maxBytes = options?.maxBytes ?? SharedQueryDefaults.maxBytes;
+    this.maxSize = options?.maxSize ?? SharedQueryConfig.maxSize;
+    this.maxBytes = options?.maxBytes ?? SharedQueryConfig.maxBytes;
 
     this.keepLastNonEmptyData = Boolean(options?.keepLastNonEmptyData);
 
-    this.log = options?.log ?? SharedQueryDefaults.log;
+    this.log = options?.log ?? SharedQueryConfig.log;
 
     this.queryState = sharedState<SharedQueryState<TData>>(
       {}, // defaultValue
