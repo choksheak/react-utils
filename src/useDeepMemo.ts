@@ -1,7 +1,10 @@
 import isEqual from "lodash/isEqual";
 import { useMemo, useState } from "react";
 
-/** Provides a stable value for T based on deep equality. */
+/**
+ * Provides a stable value for T based on deep equality. The deep equality is
+ * determined by the `isEqual()` function in lodash.
+ */
 export function useDeepMemo<T>(value: T): T {
   const [state, setState] = useState<T>(value);
 
