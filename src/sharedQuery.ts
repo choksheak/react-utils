@@ -99,8 +99,8 @@ import {
   SharedStateOptions,
   useSharedState,
 } from "./sharedState";
+import { stringifyDeterministicForKeys } from "./stringify";
 import { useDeepMemo } from "./useDeepMemo";
-import { stringifyDeterministicForKeys } from "./utils/stringify";
 
 /** Type of the queryFn used to fetch the data from source. */
 export type QueryFn<TArgs extends unknown[], TData> = (
