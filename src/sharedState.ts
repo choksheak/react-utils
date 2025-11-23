@@ -43,11 +43,7 @@
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
 import { Dispatch, SetStateAction, useSyncExternalStore } from "react";
 
-import {
-  getStorageAdapter,
-  StorageAdapter,
-  StorageOptions,
-} from "./utils/storage";
+import { getStorageAdapter, StorageAdapter, StorageOptions } from "./storage";
 
 /************************************************************************/
 /* Global config                                                        */
