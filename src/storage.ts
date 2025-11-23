@@ -1,8 +1,8 @@
 import { kvStore } from "@choksheak/ts-utils/kvStore";
 
 export type StorageAdapter<T> = {
-  save: (key: string, value: T) => Promise<void> | void;
-  load: (key: string) => Promise<T | undefined> | T | undefined;
+  set: (key: string, value: T) => Promise<void> | void;
+  get: (key: string) => Promise<T | undefined> | T | undefined;
   delete: (key: string) => Promise<void> | void;
   clear: () => Promise<void> | void;
 };
@@ -59,7 +59,7 @@ export class InMemoryStorageAdapter<T> implements StorageAdapter<T> {
     public readonly expiryMs: number,
   ) {}
 
-  public save(key: string, value: T): void {
+  public set(key: string, value: T): void {
     const fullKey = this.keyPrefix + ":" + key;
     this.cache.set(fullKey, {
       value,
@@ -67,7 +67,7 @@ export class InMemoryStorageAdapter<T> implements StorageAdapter<T> {
     });
   }
 
-  public load(key: string): T | undefined {
+  public get(key: string): T | undefined {
     const fullKey = this.keyPrefix + ":" + key;
     const cached = this.cache.get(fullKey);
 
@@ -95,7 +95,7 @@ export class LocalStorageAdapter<T> implements StorageAdapter<T> {
     public readonly expiryMs: number,
   ) {}
 
-  public save(key: string, value: T): void {
+  public set(key: string, value: T): void {
     if (typeof window === "undefined") return;
 
     const fullKey = this.keyPrefix + ":" + key;
@@ -108,7 +108,7 @@ export class LocalStorageAdapter<T> implements StorageAdapter<T> {
     );
   }
 
-  public load(key: string): T | undefined {
+  public get(key: string): T | undefined {
     if (typeof window === "undefined") return undefined;
 
     const fullKey = this.keyPrefix + ":" + key;
@@ -155,14 +155,14 @@ export class IndexedDbAdapter<T> implements StorageAdapter<T> {
     public readonly expiryMs: number,
   ) {}
 
-  public async save(key: string, value: T): Promise<void> {
+  public async set(key: string, value: T): Promise<void> {
     if (typeof window === "undefined") return;
 
     const fullKey = this.keyPrefix + ":" + key;
     await kvStore.set(fullKey, JSON.stringify(value), this.expiryMs);
   }
 
-  public async load(key: string): Promise<T | undefined> {
+  public async get(key: string): Promise<T | undefined> {
     if (typeof window === "undefined") return undefined;
 
     const fullKey = this.keyPrefix + ":" + key;

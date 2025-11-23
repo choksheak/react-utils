@@ -201,14 +201,14 @@ export class SharedState<T> {
     }
 
     pubSubStore.set(this.pubSubKey, next);
-    void this.storageAdapter?.save(STORAGE_KEY, next);
+    void this.storageAdapter?.set(STORAGE_KEY, next);
   }
 
   // Remove the value of the shared state. Actually this just sets the value
   // back to the given default value.
   public delete() {
     pubSubStore.set(this.pubSubKey, this.defaultValue);
-    void this.storageAdapter?.save(STORAGE_KEY, this.defaultValue);
+    void this.storageAdapter?.set(STORAGE_KEY, this.defaultValue);
   }
 
   // Initial default handling
@@ -216,7 +216,7 @@ export class SharedState<T> {
     if (this.initDone) return;
     this.initDone = true;
 
-    const v = await this.storageAdapter?.load(STORAGE_KEY);
+    const v = await this.storageAdapter?.get(STORAGE_KEY);
     pubSubStore.set(this.pubSubKey, v !== undefined ? v : this.defaultValue);
   }
 }
