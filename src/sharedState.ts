@@ -224,13 +224,12 @@ export class SharedState<T> {
     if (this.initDone || this.initStarted) return;
     this.initStarted = true;
 
-    const v = await this.storageAdapter?.get(STORAGE_KEY);
-    const value = v !== undefined ? v : this.defaultValue;
-    pubSubStore.set(this.pubSubKey, value);
-    this.initDone = true;
+    const stored = await this.storageAdapter?.get(STORAGE_KEY);
+    const value = stored !== undefined ? stored : this.defaultValue;
 
-    // Make sure React rerenders with the new initDone=true set.
     pubSubStore.set(this.pubSubKey, value);
+
+    this.initDone = true;
   }
 }
 
