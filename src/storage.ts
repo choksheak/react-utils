@@ -29,6 +29,10 @@ export type StorageOptions<T> = {
   store?: StorageAdapter<T> | StoreOptions;
 };
 
+// In SSR (Server-Side Rendering) mode, we never want to use our storage
+// adapters for anything.
+const IS_NOT_BROWSER = typeof window === "undefined";
+
 export function getStorageAdapter<T>(
   options: StorageOptions<T> | undefined,
   defaultStoreExpiryMs: number,
@@ -57,13 +61,13 @@ export function getStorageAdapter<T>(
         // Handle SSR.
         return {
           set: (key: string, value: T): void => {
-            if (typeof window === "undefined") return; // handle SSR
+            if (IS_NOT_BROWSER) return; // handle SSR
 
             // Also apply the custom expiryMs on every item in this store.
             adapter.set(key, value);
           },
           get: (key: string): T | undefined => {
-            if (typeof window === "undefined") return undefined; // handle SSR
+            if (IS_NOT_BROWSER) return undefined; // handle SSR
 
             const value = adapter.get<T>(key);
 
@@ -78,12 +82,12 @@ export function getStorageAdapter<T>(
             return value;
           },
           delete: (key: string): void => {
-            if (typeof window === "undefined") return; // handle SSR
+            if (IS_NOT_BROWSER) return; // handle SSR
 
             adapter.delete(key);
           },
           clear: (): void => {
-            if (typeof window === "undefined") return; // handle SSR
+            if (IS_NOT_BROWSER) return; // handle SSR
 
             adapter.clear();
           },
@@ -100,13 +104,13 @@ export function getStorageAdapter<T>(
         // DB stores, then GC will not be able to clean up abandoned stores.
         return {
           set: async (key: string, value: T): Promise<void> => {
-            if (typeof window === "undefined") return; // handle SSR
+            if (IS_NOT_BROWSER) return; // handle SSR
 
             // Also apply the custom expiryMs on every item in this store.
             await kvStore.set(keyPrefix + key, value, expiryMs);
           },
           get: async (key: string): Promise<T | undefined> => {
-            if (typeof window === "undefined") return undefined; // handle SSR
+            if (IS_NOT_BROWSER) return undefined; // handle SSR
 
             const fullKey = keyPrefix + key;
             const value = await kvStore.get<T>(fullKey);
@@ -122,12 +126,12 @@ export function getStorageAdapter<T>(
             return value;
           },
           delete: async (key: string): Promise<void> => {
-            if (typeof window === "undefined") return; // handle SSR
+            if (IS_NOT_BROWSER) return; // handle SSR
 
             await kvStore.delete(keyPrefix + key);
           },
           clear: async (): Promise<void> => {
-            if (typeof window === "undefined") return; // handle SSR
+            if (IS_NOT_BROWSER) return; // handle SSR
 
             await kvStore.clear();
           },
