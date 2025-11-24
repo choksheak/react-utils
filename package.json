@@ -1,7 +1,7 @@
 {
   "name": "@choksheak/react-utils",
   "license": "The Unlicense",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Miscellaneous React+TypeScript utilities with support for full tree-shaking.",
   "private": false,
   "files": [
