@@ -578,20 +578,16 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     const newState = { ...oldState }; // shallow clone
     let needUpdate = false;
 
-    const entriesByTimeAscending = Object.entries(newState).sort(
-      (entry1, entry2) => entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
-    );
-
-    for (const [key] of entriesByTimeAscending) {
+    const deleteKeyIfNotMounted = (key: string, expired: boolean) => {
       // Mounted keys cannot be cleaned up as they are visible in the UI.
       if (this.mountedKeys.has(key)) {
         this.log(`Cannot clean up ${key} as it is mounted`);
-        continue;
+        return;
       }
 
       const byteSize = getByteSize(key) + getByteSize(newState[key]);
       this.log(
-        `Cleaning up unmounted ${key} (byteSize=${byteSize.toLocaleString()})`,
+        `Cleaning up unmounted${expired ? ", expired" : ""} ${key} (byteSize=${byteSize.toLocaleString()})`,
       );
 
       numToCut--;
@@ -599,9 +595,39 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
       delete newState[key];
       needUpdate = true;
+    };
 
-      if (numToCut <= 0 && bytesToCut <= 0) {
+    let entriesByTimeAscending = Object.entries(newState).sort(
+      (entry1, entry2) => entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
+    );
+
+    // Clean up all expired entries. Note that the auto-expiration in the
+    // storage adapter only applies to the entire state, which contains all
+    // the different query keys and their values. Each query key has its own
+    // timestamp and we need to apply our own expiration here.
+    for (const [key] of entriesByTimeAscending) {
+      // Anything after this is not expired yet.
+      if (!this.isExpired(newState[key].lastUpdatedMs)) {
         break;
+      }
+
+      deleteKeyIfNotMounted(key, true);
+    }
+
+    if (numToCut > 0 || bytesToCut > 0) {
+      if (needUpdate) {
+        entriesByTimeAscending = Object.entries(newState).sort(
+          (entry1, entry2) => entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
+        );
+      }
+
+      // Clean up starting from oldest entry first.
+      for (const [key] of entriesByTimeAscending) {
+        deleteKeyIfNotMounted(key, false);
+
+        if (numToCut <= 0 && bytesToCut <= 0) {
+          break;
+        }
       }
     }
 
