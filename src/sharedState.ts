@@ -190,18 +190,46 @@ export class SharedState<T> {
     }
   }
 
-  // `subscribe` function required by useSyncExternalStore
+  /** `subscribe` function required by useSyncExternalStore. */
   public subscribe(subscriber: () => void): () => void {
     return pubSubStore.subscribe(this.pubSubKey, () => subscriber());
   }
 
-  // Get the value of the shared state.
-  // `getSnapshot` function — must return same ref if value unchanged
+  /** Returns true if there is a backing store. */
+  public hasStore(): boolean {
+    return Boolean(this.storageAdapter);
+  }
+
+  /**
+   * Set a value directly into the store. Does nothing if there is no
+   * backing store.
+   *
+   * Warning: If you want to set the value properly, you should use
+   * `setValue()` instead which also updates the in-memory copy.
+   */
+  public async setInStore(value: T): Promise<void> {
+    return await this.storageAdapter?.set(STORAGE_KEY, value);
+  }
+
+  /**
+   * Get a value directly from the store. Returns undefined if there is no
+   * backing store.
+   */
+  public async getFromStore(): Promise<T | undefined> {
+    return await this.storageAdapter?.get(STORAGE_KEY);
+  }
+
+  /**
+   * Get the value of the shared state.
+   *  `getSnapshot` function — must return same ref if value unchanged.
+   * Note that this would return the default value if data init from store is
+   * not completed yet.
+   */
   public getSnapshot(): T {
     return pubSubStore.get(this.pubSubKey);
   }
 
-  // Set the value of the shared state.
+  /** Set the value of the shared state. */
   public setValue(next: SetStateAction<T>): void {
     if (typeof next === "function") {
       const prev = pubSubStore.get<T>(this.pubSubKey);
@@ -209,22 +237,24 @@ export class SharedState<T> {
     }
 
     pubSubStore.set(this.pubSubKey, next);
-    void this.storageAdapter?.set(STORAGE_KEY, next);
+    void this.setInStore(next);
   }
 
-  // Remove the value of the shared state. Actually this just sets the value
-  // back to the given default value.
+  /**
+   * Remove the value of the shared state. Actually this just sets the value
+   * back to the given default value.
+   */
   public delete() {
     pubSubStore.set(this.pubSubKey, this.defaultValue);
     void this.storageAdapter?.set(STORAGE_KEY, this.defaultValue);
   }
 
-  // Initial default handling
+  /** Initial default handling. */
   public async initDefaultValueOnce() {
     if (this.initDone || this.initStarted) return;
     this.initStarted = true;
 
-    const stored = await this.storageAdapter?.get(STORAGE_KEY);
+    const stored = await this.getFromStore();
     const value = stored !== undefined ? stored : this.defaultValue;
 
     pubSubStore.set(this.pubSubKey, value);
