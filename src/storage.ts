@@ -42,10 +42,36 @@ export function getStorageAdapter<T>(
     const expiryMs = store.expiryMs || defaultStoreExpiryMs;
 
     switch (store.persistTo) {
-      case "localStorage":
-        return new LocalStore(store.key, {
+      case "localStorage": {
+        const adapter = new LocalStore(store.key, {
           defaultExpiryMs: expiryMs,
-        }).asStorageAdapter<T>();
+        });
+
+        // Handle SSR.
+        return {
+          set: (key: string, value: T): void => {
+            if (typeof window === "undefined") return; // handle SSR
+
+            // Also apply the custom expiryMs on every item in this store.
+            adapter.set(key, value);
+          },
+          get: (key: string): T | undefined => {
+            if (typeof window === "undefined") return undefined; // handle SSR
+
+            return adapter.get(key);
+          },
+          delete: (key: string): void => {
+            if (typeof window === "undefined") return; // handle SSR
+
+            adapter.delete(key);
+          },
+          clear: (): void => {
+            if (typeof window === "undefined") return; // handle SSR
+
+            adapter.clear();
+          },
+        };
+      }
 
       case "indexedDb": {
         // Use the key prefix as a unique namespace for this store.
@@ -56,16 +82,24 @@ export function getStorageAdapter<T>(
         // DB stores, then GC will not be able to clean up abandoned stores.
         return {
           set: async (key: string, value: T): Promise<void> => {
+            if (typeof window === "undefined") return; // handle SSR
+
             // Also apply the custom expiryMs on every item in this store.
             await kvStore.set(keyPrefix + key, value, expiryMs);
           },
           get: async (key: string): Promise<T | undefined> => {
+            if (typeof window === "undefined") return undefined; // handle SSR
+
             return await kvStore.get(keyPrefix + key);
           },
           delete: async (key: string): Promise<void> => {
+            if (typeof window === "undefined") return; // handle SSR
+
             await kvStore.delete(keyPrefix + key);
           },
           clear: async (): Promise<void> => {
+            if (typeof window === "undefined") return; // handle SSR
+
             await kvStore.clear();
           },
         };
