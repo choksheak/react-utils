@@ -99,6 +99,7 @@ import {
   SharedStateOptions,
   useSharedState,
 } from "./sharedState";
+import { PersistTo } from "./storage";
 import { stringifyDeterministicForKeys } from "./stringify";
 import { useDeepMemo } from "./useDeepMemo";
 
@@ -156,9 +157,6 @@ export type UseQueryResult<TData> = QueryStateValue<TData> &
 
     deleteData: () => void;
   }>;
-
-/** List of all available persistence options. */
-export type PersistTo = "localStorage" | "indexedDb";
 
 /**
  * The full query state is a record of all the fetch states mapped by
@@ -296,14 +294,16 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       options?.refetchOnStale ?? SharedQueryConfig.refetchOnStale;
 
     // Apply shortcut when using `persistTo`.
-    // Specifying the storage keys will take precedence over `persistTo`.
-    if (!options.localStorageKey && !options.indexedDbKey) {
+    // Specifying the `store` will take precedence over `persistTo`.
+    if (!options.store) {
       const persistTo = options.persistTo ?? SharedQueryConfig.persistTo;
 
-      if (persistTo === "localStorage") {
-        options.localStorageKey = options.queryName;
-      } else if (persistTo === "indexedDb") {
-        options.indexedDbKey = options.queryName;
+      if (persistTo) {
+        options.store = {
+          persistTo,
+          key: options.queryName,
+          expiryMs: this.expiryMs,
+        };
       }
     }
 
@@ -316,11 +316,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
     this.queryState = sharedState<SharedQueryState<TData>>(
       {}, // defaultValue
-      {
-        ...options,
-        // Fallback to use expiryMs for the storeExpiryMs.
-        storeExpiryMs: options?.storeExpiryMs || this.expiryMs,
-      },
+      options,
     );
   }
 
@@ -460,7 +456,18 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
   /** Get the current stored data for a query key. */
   public getData(queryKey: string): TData | undefined {
-    return this.queryState.getSnapshot()?.[queryKey]?.data;
+    const stateValue: QueryStateValue<TData> | undefined =
+      this.queryState.getSnapshot()?.[queryKey];
+
+    // Check for expiration.
+    if (stateValue?.lastUpdatedMs) {
+      if (this.isExpired(stateValue.lastUpdatedMs)) {
+        this.deleteData(queryKey);
+        return undefined;
+      }
+    }
+
+    return stateValue?.data;
   }
 
   /** Set the data directly if the user obtained it from somewhere else. */

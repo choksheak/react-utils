@@ -2,44 +2,60 @@ import { KvStore, KvStoreConfig } from "@choksheak/ts-utils/kvStore";
 import { LocalStore } from "@choksheak/ts-utils/localStore";
 import { StorageAdapter } from "@choksheak/ts-utils/storageAdapter";
 
-export type StorageOptions<T> = {
-  // If specified, this will be used and all other fields will be ignored.
-  store?: StorageAdapter<T>;
+/** List of all available pre-built persistence options. */
+export type PersistTo = "localStorage" | "indexedDb";
 
-  // Storage key in local storage for this data.
-  localStorageKey?: string;
+export type StoreOptions = {
+  persistTo: PersistTo;
 
-  // Storage key in indexed db for this data.
-  indexedDbKey?: string;
+  // Storage key to act as a namespace to store the data.
+  key: string;
 
   // How long to wait before the value is considered expired.
-  storeExpiryMs?: number;
+  expiryMs?: number;
+};
+
+export type StorageOptions<T> = {
+  /**
+   * You can either specify the storage adapter directly to use a custom
+   * store, or specify the properties to use the pre-built ones.
+   */
+  store?: StorageAdapter<T> | StoreOptions;
 };
 
 export function getStorageAdapter<T>(
   options: StorageOptions<T> | undefined,
   defaultStoreExpiryMs: number,
 ): StorageAdapter<T> | null {
-  const { localStorageKey, indexedDbKey, storeExpiryMs, store } = options ?? {};
+  const { store } = options ?? {};
 
-  if (store) {
-    return store;
+  if (!store) {
+    return null;
   }
 
-  const expiryMs = storeExpiryMs || defaultStoreExpiryMs;
+  if (
+    "persistTo" in store &&
+    typeof store.persistTo === "string" &&
+    "key" in store &&
+    typeof store.key === "string"
+  ) {
+    const expiryMs = store.expiryMs || defaultStoreExpiryMs;
 
-  if (localStorageKey) {
-    return new LocalStore(localStorageKey, {
-      defaultExpiryMs: expiryMs,
-    }).asStorageAdapter<T>();
+    switch (store.persistTo) {
+      case "localStorage":
+        return new LocalStore(store.key, {
+          defaultExpiryMs: expiryMs,
+        }).asStorageAdapter<T>();
+      case "indexedDb":
+        return new KvStore(KvStoreConfig.dbName, {
+          storeName: store.key,
+          defaultExpiryMs: expiryMs,
+        }).asStorageAdapter<T>();
+      default:
+        store.persistTo satisfies never;
+        throw new Error(`Unknown store.adapter ${store.persistTo}`);
+    }
   }
 
-  if (indexedDbKey) {
-    return new KvStore(KvStoreConfig.dbName, {
-      storeName: indexedDbKey,
-      defaultExpiryMs: expiryMs,
-    }).asStorageAdapter<T>();
-  }
-
-  return null;
+  return store as StorageAdapter<T>;
 }
