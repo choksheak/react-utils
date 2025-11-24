@@ -1,4 +1,4 @@
-import { KvStore, KvStoreConfig } from "@choksheak/ts-utils/kvStore";
+import { kvStore } from "@choksheak/ts-utils/kvStore";
 import { LocalStore } from "@choksheak/ts-utils/localStore";
 import { StorageAdapter } from "@choksheak/ts-utils/storageAdapter";
 
@@ -46,11 +46,31 @@ export function getStorageAdapter<T>(
         return new LocalStore(store.key, {
           defaultExpiryMs: expiryMs,
         }).asStorageAdapter<T>();
-      case "indexedDb":
-        return new KvStore(KvStoreConfig.dbName, {
-          storeName: store.key,
-          defaultExpiryMs: expiryMs,
-        }).asStorageAdapter<T>();
+
+      case "indexedDb": {
+        // Use the key prefix as a unique namespace for this store.
+        const keyPrefix = store.key + ":";
+
+        // Prefix all keys using `keyPrefix` so that we can keep all data in
+        // the same store in the same DB. If we keep the data in different
+        // DB stores, then GC will not be able to clean up abandoned stores.
+        return {
+          set: async (key: string, value: T): Promise<void> => {
+            // Also apply the custom expiryMs on every item in this store.
+            await kvStore.set(keyPrefix + key, value, expiryMs);
+          },
+          get: async (key: string): Promise<T | undefined> => {
+            return await kvStore.get(keyPrefix + key);
+          },
+          delete: async (key: string): Promise<void> => {
+            await kvStore.delete(keyPrefix + key);
+          },
+          clear: async (): Promise<void> => {
+            await kvStore.clear();
+          },
+        };
+      }
+
       default:
         store.persistTo satisfies never;
         throw new Error(`Unknown store.adapter ${store.persistTo}`);
