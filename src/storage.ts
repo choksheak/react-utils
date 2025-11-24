@@ -5,16 +5,22 @@ import { StorageAdapter } from "@choksheak/ts-utils/storageAdapter";
 /** List of all available pre-built persistence options. */
 export type PersistTo = "localStorage" | "indexedDb";
 
+/** Options to configure a pre-built store adapter. */
 export type StoreOptions = {
+  /** Choose which pre-built store adapter to use. */
   persistTo: PersistTo;
 
-  // Storage key to act as a namespace to store the data.
+  /** Storage key to act as a namespace to store the data. */
   key: string;
 
-  // How long to wait before the value is considered expired.
+  /** How long to wait before the value is considered expired. */
   expiryMs?: number;
+
+  /** Returns true if the given value supposed to be of type T is valid. */
+  isValid?: (u: unknown) => boolean;
 };
 
+/** Either use a pre-built store, or a custom one you provide. */
 export type StorageOptions<T> = {
   /**
    * You can either specify the storage adapter directly to use a custom
@@ -40,6 +46,7 @@ export function getStorageAdapter<T>(
     typeof store.key === "string"
   ) {
     const expiryMs = store.expiryMs || defaultStoreExpiryMs;
+    const isValid = store.isValid;
 
     switch (store.persistTo) {
       case "localStorage": {
@@ -58,7 +65,17 @@ export function getStorageAdapter<T>(
           get: (key: string): T | undefined => {
             if (typeof window === "undefined") return undefined; // handle SSR
 
-            return adapter.get(key);
+            const value = adapter.get<T>(key);
+
+            if (isValid && !isValid(value)) {
+              console.warn(
+                `localStorage adapter: Auto-discard invalid value for ${key}: ${JSON.stringify(value)}`,
+              );
+              adapter.delete(key);
+              return undefined;
+            }
+
+            return value;
           },
           delete: (key: string): void => {
             if (typeof window === "undefined") return; // handle SSR
@@ -76,6 +93,7 @@ export function getStorageAdapter<T>(
       case "indexedDb": {
         // Use the key prefix as a unique namespace for this store.
         const keyPrefix = store.key + ":";
+        const isValid = store.isValid;
 
         // Prefix all keys using `keyPrefix` so that we can keep all data in
         // the same store in the same DB. If we keep the data in different
@@ -90,7 +108,18 @@ export function getStorageAdapter<T>(
           get: async (key: string): Promise<T | undefined> => {
             if (typeof window === "undefined") return undefined; // handle SSR
 
-            return await kvStore.get(keyPrefix + key);
+            const fullKey = keyPrefix + key;
+            const value = await kvStore.get<T>(fullKey);
+
+            if (isValid && !isValid(value)) {
+              console.warn(
+                `indexedDb adapter: Auto-discard invalid value for ${key}: ${JSON.stringify(value)}`,
+              );
+              await kvStore.delete(fullKey);
+              return undefined;
+            }
+
+            return value;
           },
           delete: async (key: string): Promise<void> => {
             if (typeof window === "undefined") return; // handle SSR
