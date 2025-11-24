@@ -95,7 +95,7 @@
     "wretch": "^3.0.2"
   },
   "peerDependencies": {
-    "@choksheak/ts-utils": ">=0.3.1",
+    "@choksheak/ts-utils": ">=0.3.2",
     "lodash": ">=4.17.21",
     "object-sizeof": ">=2.6.5",
     "react": ">=16",
