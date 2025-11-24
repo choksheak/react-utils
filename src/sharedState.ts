@@ -158,6 +158,7 @@ export class SharedState<T> {
   private readonly pubSubKey: string;
   private readonly storageAdapter: StorageAdapter<T> | null;
   public readonly setValueBounded: Dispatch<SetStateAction<T>>;
+  public initStarted = false;
   public initDone = false;
 
   public constructor(
@@ -220,11 +221,16 @@ export class SharedState<T> {
 
   // Initial default handling
   public async initDefaultValueOnce() {
-    if (this.initDone) return;
-    this.initDone = true;
+    if (this.initDone || this.initStarted) return;
+    this.initStarted = true;
 
     const v = await this.storageAdapter?.get(STORAGE_KEY);
-    pubSubStore.set(this.pubSubKey, v !== undefined ? v : this.defaultValue);
+    const value = v !== undefined ? v : this.defaultValue;
+    pubSubStore.set(this.pubSubKey, value);
+    this.initDone = true;
+
+    // Make sure React rerenders with the new initDone=true set.
+    pubSubStore.set(this.pubSubKey, value);
   }
 }
 
