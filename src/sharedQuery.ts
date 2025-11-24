@@ -690,17 +690,21 @@ const DEFAULT_QUERY_STATE_ENTRY: Readonly<QueryStateValue<any>> = {
 };
 
 /**
- * React hook to make use of a shared query inside any React component.
+ * React hook to make use of a shared query inside any React component. The
+ * args do not need to be specified if no args are needed, i.e. this would work
+ * ```
+ *   const allUsers = useSharedQuery(listUsersQuery);
+ * ```
  *
  * Example:
  * ```
- *   const users = useSharedQuery(usersQuery, ["123"]);
+ *   const users = useSharedQuery(usersQuery, "userid123");
  * ```
  */
 export function useSharedQuery<TArgs extends unknown[], TData>(
   query: SharedQuery<TArgs, TData>,
-  // Default to use no arguments.
-  args: TArgs = [] as unknown as TArgs,
+  // Optional: Default to use no arguments.
+  ...args: TArgs
 ): UseQueryResult<TData> {
   // We don't expect users to provide a stable `args`, so stabilize it here.
   const stableArgs = useDeepMemo(args);
