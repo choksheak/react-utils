@@ -828,7 +828,8 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
         if (!isMounted.current) return;
 
-        setQueryStateValue(state);
+        // Make sure to reset loading to false.
+        setQueryStateValue({ ...state, loading: false });
       } catch (e) {
         if (!isMounted.current) return;
 
