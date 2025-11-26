@@ -180,6 +180,12 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = {
   queryFn: QueryFn<TArgs, TData>;
 
   /**
+   * Function to re-fetch data. Usually this would just be the `queryFn`, but
+   * if you need a different behavior for refetching, then specify this.
+   */
+  refetchFn?: QueryFn<TArgs, TData>;
+
+  /**
    * ms before data considered stale; 0 means always stale.
    */
   staleMs?: number;
@@ -257,6 +263,9 @@ export function configureSharedQuery(config: Partial<SharedQueryConfig>) {
   Object.assign(SharedQueryConfig, config);
 }
 
+/** Whether this is a normal query or an explicit refetch. */
+type QueryType = "query" | "refetch";
+
 /** Please use sharedQuery() instead. */
 export class SharedQuery<TArgs extends unknown[], TData> {
   private readonly inflightQueries = new Map<
@@ -274,7 +283,8 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   private readonly mountedKeys = new Map<string, number>();
 
   public readonly queryName: string;
-  private readonly queryFn: QueryFn<TArgs, TData>;
+  public readonly queryFn: QueryFn<TArgs, TData>;
+  public readonly refetchFn: QueryFn<TArgs, TData> | undefined;
   public readonly expiryMs: number;
   public readonly staleMs: number;
   public readonly refetchOnStale: boolean;
@@ -286,6 +296,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   public constructor(options: SharedQueryOptions<TArgs, TData>) {
     this.queryName = options.queryName;
     this.queryFn = options.queryFn;
+    this.refetchFn = options.refetchFn;
 
     this.staleMs = options?.staleMs ?? SharedQueryConfig.staleMs;
     this.expiryMs = options?.expiryMs ?? SharedQueryConfig.expiryMs;
@@ -403,7 +414,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       // If stale, optionally update the data in the background.
       if (this.refetchOnStale) {
         this.log(`refetchOnStale for ${queryKey}`);
-        void this.dedupedFetch(queryKey, ...args);
+        void this.dedupedFetch(queryKey, "query", ...args);
       }
 
       // Still return stale data immediately.
@@ -411,20 +422,28 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       return cached.data;
     }
 
-    return await this.dedupedFetch(queryKey, ...args);
+    return await this.dedupedFetch(queryKey, "query", ...args);
   }
 
-  private dedupedFetch(queryKey: string, ...args: TArgs): Promise<TData> {
+  private dedupedFetch(
+    queryKey: string,
+    queryType: QueryType,
+    ...args: TArgs
+  ): Promise<TData> {
     const inflightQuery = this.inflightQueries.get(queryKey);
 
-    // De-duplicate in-flight requests
+    // De-duplicate in-flight requests. Note that queries and refetches are
+    // also deduped because they should technically be trying to fetch the same
+    // data.
     if (inflightQuery) {
-      this.log(`Deduplicating inflight fetch for ${queryKey}`);
+      this.log(
+        `Deduplicating inflight fetch for ${queryKey}, queryType=${queryType}`,
+      );
       return inflightQuery.promise;
     }
 
     // Fetch new data
-    const promise = this.startFetching(queryKey, args);
+    const promise = this.startFetching(queryKey, queryType, args);
     const abortController = new AbortController();
 
     this.inflightQueries.set(queryKey, { promise, abortController });
@@ -432,17 +451,23 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     return promise;
   }
 
-  private async startFetching(queryKey: string, args: TArgs) {
-    this.log(`Start fetching ${queryKey}`);
+  private async startFetching(
+    queryKey: string,
+    queryType: QueryType,
+    args: TArgs,
+  ) {
+    this.log(`Start fetching ${queryKey}, queryType=${queryType}`);
 
     try {
-      const data = await this.queryFn(...args);
+      const data = await (queryType === "refetch" && this.refetchFn
+        ? this.refetchFn(...args)
+        : this.queryFn(...args));
 
       this.log(`Successfully fetched ${queryKey}`);
       this.setData(queryKey, data, Date.now());
       return data;
     } catch (e) {
-      this.log(`Failed to fetch ${queryKey}: ${e}`);
+      this.log(`Failed to fetch ${queryKey} for queryType=${queryType}: ${e}`);
       throw e;
     } finally {
       this.inflightQueries.delete(queryKey);
@@ -494,7 +519,16 @@ export class SharedQuery<TArgs extends unknown[], TData> {
    */
   public async updateFromSource(...args: TArgs): Promise<TData> {
     const key = this.getQueryKey(args);
-    return await this.dedupedFetch(key, ...args);
+    return await this.dedupedFetch(key, "query", ...args);
+  }
+
+  /**
+   * Perform an explicit refetch. If `options.refetchFn` was not specified,
+   * then this would be identical to calling `this.updateFromSource()`.
+   */
+  public async refetch(...args: TArgs): Promise<TData> {
+    const key = this.getQueryKey(args);
+    return await this.dedupedFetch(key, "refetch", ...args);
   }
 
   /** Delete the cached data for one set of arguments. */
@@ -748,8 +782,10 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
   // The fetch logic wrapped in useCallback to be stable for useEffect
   const execute = useCallback(
-    async (forceRefresh: boolean) => {
-      query.log(`Begin executing shared query ${queryKey}`);
+    async (isRefetch: boolean) => {
+      query.log(
+        `Begin executing shared query ${queryKey}, isRefetch=${isRefetch}`,
+      );
 
       setQueryStateValue((prev) => ({
         // Keep old data and error.
@@ -759,8 +795,8 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
       }));
 
       try {
-        const data = await (forceRefresh
-          ? query.updateFromSource(...stableArgs)
+        const data = await (isRefetch
+          ? query.refetch(...stableArgs)
           : query.getCachedOrFetch(...stableArgs));
 
         if (isMounted.current) {
