@@ -404,8 +404,19 @@ export class SharedQuery<TArgs extends unknown[], TData> {
   public async getCachedOrFetch(
     ...args: TArgs
   ): Promise<QueryStateValue<TData>> {
+    // Important: wait for data to be loaded from cache first before trying to
+    // fetch from server. This fixes a bad bug where the data is big, and the
+    // code here starts a server fetch before the cache data loaded.
+    const startMs = Date.now();
+    await this.queryState.readyPromise;
+    const waitedMs = Date.now() - startMs;
+
     const queryKey = this.getQueryKey(args);
     const cached = this.queryState.getSnapshot()?.[queryKey];
+
+    if (waitedMs) {
+      this.log(`${queryKey}: Waited for ${waitedMs}ms before data is ready`);
+    }
 
     if (cached?.data && !this.isExpired(cached.dataUpdatedMs ?? 0)) {
       // Return cached value if not stale.

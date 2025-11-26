@@ -161,10 +161,22 @@ export class SharedState<T> {
   public initStarted = false;
   public initDone = false;
 
+  // Allow users to await for the completion of data init.
+  public readonly readyPromise: Promise<void>;
+  private readonly resolveReadyPromise: () => void;
+
   public constructor(
     private readonly defaultValue: T,
     options?: SharedStateOptions<T>,
   ) {
+    let readyResolve: () => void = () => {};
+
+    this.readyPromise = new Promise<void>((resolve) => {
+      readyResolve = resolve;
+    });
+
+    this.resolveReadyPromise = readyResolve;
+
     this.pubSubKey = String(stateKey++);
 
     // Use max of 1 storage adapter per shared state.
@@ -260,6 +272,7 @@ export class SharedState<T> {
     pubSubStore.set(this.pubSubKey, value);
 
     this.initDone = true;
+    this.resolveReadyPromise();
   }
 }
 
