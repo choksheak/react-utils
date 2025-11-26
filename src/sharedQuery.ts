@@ -400,7 +400,10 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     return ageMs > this.expiryMs;
   }
 
-  public async getCachedOrFetch(...args: TArgs): Promise<TData> {
+  /** For cached data, we need to return the correct timestamps as well. */
+  public async getCachedOrFetch(
+    ...args: TArgs
+  ): Promise<QueryStateValue<TData>> {
     const queryKey = this.getQueryKey(args);
     const cached = this.queryState.getSnapshot()?.[queryKey];
 
@@ -408,7 +411,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
       // Return cached value if not stale.
       if (!this.isStale(cached.dataUpdatedMs ?? 0)) {
         this.log(`Return fresh data ${queryKey} from cache without fetching`);
-        return cached.data;
+        return cached;
       }
 
       // If stale, optionally update the data in the background.
@@ -419,10 +422,19 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
       // Still return stale data immediately.
       this.log(`Returning stale data for ${queryKey}`);
-      return cached.data;
+      return cached;
     }
 
-    return await this.dedupedFetch(queryKey, "query", ...args);
+    const data = await this.dedupedFetch(queryKey, "query", ...args);
+    const now = Date.now();
+
+    return {
+      // Don't keep old error.
+      lastUpdatedMs: now,
+      loading: false,
+      data,
+      dataUpdatedMs: now,
+    };
   }
 
   private dedupedFetch(
@@ -787,6 +799,8 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         `Begin executing shared query ${queryKey}, isRefetch=${isRefetch}`,
       );
 
+      if (!isMounted.current) return;
+
       setQueryStateValue((prev) => ({
         // Keep old data and error.
         ...prev,
@@ -795,34 +809,39 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
       }));
 
       try {
-        const data = await (isRefetch
-          ? query.refetch(...stableArgs)
-          : query.getCachedOrFetch(...stableArgs));
+        let state: QueryStateValue<TData>;
 
-        if (isMounted.current) {
+        if (isRefetch) {
+          const data = await query.refetch(...stableArgs);
           const now = Date.now();
 
-          setQueryStateValue({
+          state = {
             // Don't keep old error.
             lastUpdatedMs: now,
             loading: false,
             data,
             dataUpdatedMs: now,
-          });
+          };
+        } else {
+          state = await query.getCachedOrFetch(...stableArgs);
         }
-      } catch (e) {
-        if (isMounted.current) {
-          const now = Date.now();
 
-          setQueryStateValue((prev) => ({
-            // Keep old data.
-            ...prev,
-            lastUpdatedMs: now,
-            loading: false,
-            error: e,
-            errorUpdatedMs: now,
-          }));
-        }
+        if (!isMounted.current) return;
+
+        setQueryStateValue(state);
+      } catch (e) {
+        if (!isMounted.current) return;
+
+        const now = Date.now();
+
+        setQueryStateValue((prev) => ({
+          // Keep old data.
+          ...prev,
+          lastUpdatedMs: now,
+          loading: false,
+          error: e,
+          errorUpdatedMs: now,
+        }));
       }
     },
     [query, queryKey, setQueryStateValue, stableArgs],
