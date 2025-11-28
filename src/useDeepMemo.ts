@@ -1,3 +1,15 @@
+/**
+ * @packageDocumentation
+ *
+ * Provides a memoized value in React where the value is checked for deep
+ * equality. If the value has changed, but is deeply equal to the previous
+ * value, then useDeepMemo will return the same reference to the previous
+ * value and ignore the latest value.
+ *
+ * This is mainly used in shared queries to check for changes in the query
+ * arguments, but it might be useful for your own use cases.
+ */
+
 import isEqual from "lodash/isEqual";
 import { useMemo, useState } from "react";
 
@@ -9,7 +21,7 @@ export function useDeepMemo<T>(value: T): T {
   const [state, setState] = useState<T>(value);
 
   return useMemo(() => {
-    if (state === value || isEqual(state, value)) {
+    if (isEqual(state, value)) {
       return state;
     }
 

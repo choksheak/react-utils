@@ -1,4 +1,14 @@
 /**
+ * @packageDocumentation
+ *
+ * Implements special stringify for use in the shared queries. This will likely
+ * not be reusable for your own use cases.
+ *
+ * Normally you will not need to use this module directly, but if you have a
+ * need for it, feel free to use it.
+ */
+
+/**
  * JSON stringify a value of any type, and returns an unsafe string. The string
  * is "unsafe" because you might not be able to restore the original object
  * using the serialized JSON. This is specifically used for query key generation

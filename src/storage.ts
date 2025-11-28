@@ -1,3 +1,14 @@
+/**
+ * @packageDocumentation
+ *
+ * Backing storage implementation for the shared state. Note that this uses the
+ * LocalStore and KvStore from package "@choksheak/ts-utils", but is customized
+ * to be used for shared states.
+ *
+ * Normally you will not need to use this module directly, but if you have a
+ * need for it, feel free to use it.
+ */
+
 import { Duration } from "@choksheak/ts-utils/duration";
 import { kvStore } from "@choksheak/ts-utils/kvStore";
 import { LocalStore } from "@choksheak/ts-utils/localStore";

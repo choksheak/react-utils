@@ -2,13 +2,25 @@
  * @packageDocumentation
  *
  * The "shared state" is a React state that shares the same value across the
- * entire app. It is largely similar to the jotai library, but is much smaller
- * and much easier to work with when used for persisting in local storage or
- * indexed db, with an automatic expiration for persisted values.
+ * entire app. Users declare a shared state constant that can be reused across
+ * multiple components with the same underlying value.
  *
- * This library aims to be the shortest, simplest, easiest to use, and most
- * efficient implementation of shared global React states with seamless support
- * for client persistence.
+ * Shared states provide persistence to local storage and/or indexed DB out of
+ * the box, by using "@choksheak/ts-utils". Note that no matter if the shared
+ * state uses persistence or not, it will always maintain a copy of the state
+ * in memory. Persisted values can be configured with an automatic expiration
+ * duration.
+ *
+ * This module is largely similar to the open source "jotai" npm library. You
+ * can use shared states to replace "jotai" in your code, and optionally make
+ * use of the persistence mechanism. A quick migration guide from jotai is:
+ *
+ * ```
+ *   atom()          -->  sharedState()
+ *   useAtom()       -->  useSharedState()
+ *   useAtomValue()  -->  useSharedStateValue()
+ *   useSetAtom()    -->  useSharedStateSetter()
+ * ```
  *
  * Example:
  * ```

@@ -11,9 +11,13 @@
  * records and the total byte size of data can be limited so as to ensure the
  * query does not take up too much memory.
  *
+ * Think of shared queries as like the open source npm package "react-query",
+ * but with strong type-checking and built-in support for persistence.
+ *
  * Example:
  * ```
  *   import { sharedQuery, useSharedQuery } from "@choksheak/react-utils/sharedQuery";
+ *   import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
  *
  *   // Create a new shared query in the top level scope.
  *   // The query function `queryFn` here does not take any arguments.
@@ -31,11 +35,6 @@
  *     persistTo: "indexedDb",
  *     staleMs: MS_PER_DAY,
  *   });
- *
- *   // Note that the query will only start fetching on mount in React.
- *   // But you can do `usersQuery.getCachedOrFetch()` here to prefetch the
- *   // data if necessary.
- *   usersQuery.getCachedOrFetch();
  *
  *   // Example of using a query function with arguments.
  *   export const getUserQuery = sharedQuery({
@@ -75,7 +74,9 @@
  *   export const DisplayOneUser: React.FC<{userId: string}> = ({userId}) => {
  *      // Example of using the query with an argument. Whenever the argument
  *      // changes, the data will be fetched and updated automatically.
- *      const user = useSharedQuery(getUserQuery, [userId]);
+ *      const user = useSharedQuery(getUserQuery, userId);
+ *
+ *      // You can check for user.loading and user.error if needed.
  *
  *      return <>User: {user.data ? JSON.stringify(user.data) : "-"}</>;
  *   };
