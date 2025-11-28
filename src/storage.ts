@@ -1,3 +1,4 @@
+import { Duration } from "@choksheak/ts-utils/duration";
 import { kvStore } from "@choksheak/ts-utils/kvStore";
 import { LocalStore } from "@choksheak/ts-utils/localStore";
 import { StorageAdapter } from "@choksheak/ts-utils/storageAdapter";
@@ -14,11 +15,13 @@ export type StoreOptions = {
   key: string;
 
   /** How long to wait before the value is considered expired. */
-  expiryMs?: number;
+  expiryMs?: number | Duration;
 
   /** Returns true if the given value supposed to be of type T is valid. */
   isValid?: (u: unknown) => boolean;
 };
+
+export type StoreConstructorArgs = Omit<StoreOptions, "persistTo">;
 
 /** Either use a pre-built store, or a custom one you provide. */
 export type StorageOptions<T> = {
@@ -33,6 +36,10 @@ export type StorageOptions<T> = {
 // adapters for anything.
 const IS_NOT_BROWSER = typeof window === "undefined";
 
+/**
+ * Convert a StorageOptions<T> config object into an actual storage adapter, or
+ * returns null if a storage adapter is not configured.
+ */
 export function getStorageAdapter<T>(
   options: StorageOptions<T> | undefined,
   defaultStoreExpiryMs: number,
@@ -50,93 +57,14 @@ export function getStorageAdapter<T>(
     typeof store.key === "string"
   ) {
     const expiryMs = store.expiryMs || defaultStoreExpiryMs;
-    const isValid = store.isValid;
+    const config = { ...store, expiryMs };
 
     switch (store.persistTo) {
-      case "localStorage": {
-        const adapter = new LocalStore(store.key, {
-          defaultExpiryMs: expiryMs,
-        });
+      case "localStorage":
+        return localStoreAdapter<T>(config);
 
-        // Handle SSR.
-        return {
-          set: (key: string, value: T): void => {
-            if (IS_NOT_BROWSER) return; // handle SSR
-
-            // Also apply the custom expiryMs on every item in this store.
-            adapter.set(key, value);
-          },
-          get: (key: string): T | undefined => {
-            if (IS_NOT_BROWSER) return undefined; // handle SSR
-
-            const value = adapter.get<T>(key);
-
-            if (isValid && !isValid(value)) {
-              console.warn(
-                `localStorage adapter: Auto-discard invalid value for ${key}: ${JSON.stringify(value)}`,
-              );
-              adapter.delete(key);
-              return undefined;
-            }
-
-            return value;
-          },
-          delete: (key: string): void => {
-            if (IS_NOT_BROWSER) return; // handle SSR
-
-            adapter.delete(key);
-          },
-          clear: (): void => {
-            if (IS_NOT_BROWSER) return; // handle SSR
-
-            adapter.clear();
-          },
-        };
-      }
-
-      case "indexedDb": {
-        // Use the key prefix as a unique namespace for this store.
-        const keyPrefix = store.key + ":";
-        const isValid = store.isValid;
-
-        // Prefix all keys using `keyPrefix` so that we can keep all data in
-        // the same store in the same DB. If we keep the data in different
-        // DB stores, then GC will not be able to clean up abandoned stores.
-        return {
-          set: async (key: string, value: T): Promise<void> => {
-            if (IS_NOT_BROWSER) return; // handle SSR
-
-            // Also apply the custom expiryMs on every item in this store.
-            await kvStore.set(keyPrefix + key, value, expiryMs);
-          },
-          get: async (key: string): Promise<T | undefined> => {
-            if (IS_NOT_BROWSER) return undefined; // handle SSR
-
-            const fullKey = keyPrefix + key;
-            const value = await kvStore.get<T>(fullKey);
-
-            if (isValid && !isValid(value)) {
-              console.warn(
-                `indexedDb adapter: Auto-discard invalid value for ${key}: ${JSON.stringify(value)}`,
-              );
-              await kvStore.delete(fullKey);
-              return undefined;
-            }
-
-            return value;
-          },
-          delete: async (key: string): Promise<void> => {
-            if (IS_NOT_BROWSER) return; // handle SSR
-
-            await kvStore.delete(keyPrefix + key);
-          },
-          clear: async (): Promise<void> => {
-            if (IS_NOT_BROWSER) return; // handle SSR
-
-            await kvStore.clear();
-          },
-        };
-      }
+      case "indexedDb":
+        return kvStoreAdapter<T>(config);
 
       default:
         store.persistTo satisfies never;
@@ -145,4 +73,104 @@ export function getStorageAdapter<T>(
   }
 
   return store as StorageAdapter<T>;
+}
+
+/**
+ * Create a new SSR-safe local store adapter, which allows users to reuse the
+ * same adapter in multiple shared states or shared queries.
+ */
+export function localStoreAdapter<T>({
+  key,
+  expiryMs,
+  isValid,
+}: StoreConstructorArgs) {
+  const adapter = new LocalStore(key, { defaultExpiryMs: expiryMs });
+
+  return {
+    set: (key: string, value: T): void => {
+      if (IS_NOT_BROWSER) return; // handle SSR
+
+      // Also apply the custom expiryMs on every item in this store.
+      adapter.set(key, value);
+    },
+
+    get: (key: string): T | undefined => {
+      if (IS_NOT_BROWSER) return undefined; // handle SSR
+
+      const value = adapter.get<T>(key);
+
+      if (isValid && !isValid(value)) {
+        console.warn(
+          `localStorage adapter: Auto-discard invalid value for ${key}: ${JSON.stringify(value)}`,
+        );
+        adapter.delete(key);
+        return undefined;
+      }
+
+      return value;
+    },
+
+    delete: (key: string): void => {
+      if (IS_NOT_BROWSER) return; // handle SSR
+
+      adapter.delete(key);
+    },
+
+    clear: (): void => {
+      if (IS_NOT_BROWSER) return; // handle SSR
+
+      adapter.clear();
+    },
+  };
+}
+
+/**
+ * Create a new SSR-safe indexed DB KV store adapter, which allows users to
+ * reuse the same adapter in multiple shared states or shared queries.
+ */
+export function kvStoreAdapter<T>({
+  key,
+  expiryMs,
+  isValid,
+}: StoreConstructorArgs) {
+  // Use the key prefix as a unique namespace for this store.
+  const keyPrefix = key + ":";
+
+  // Prefix all keys using `keyPrefix` so that we can keep all data in
+  // the same store in the same DB. If we keep the data in different
+  // DB stores, then GC will not be able to clean up abandoned stores.
+  return {
+    set: async (key: string, value: T): Promise<void> => {
+      if (IS_NOT_BROWSER) return; // handle SSR
+
+      // Also apply the custom expiryMs on every item in this store.
+      await kvStore.set(keyPrefix + key, value, expiryMs);
+    },
+    get: async (key: string): Promise<T | undefined> => {
+      if (IS_NOT_BROWSER) return undefined; // handle SSR
+
+      const fullKey = keyPrefix + key;
+      const value = await kvStore.get<T>(fullKey);
+
+      if (isValid && !isValid(value)) {
+        console.warn(
+          `indexedDb adapter: Auto-discard invalid value for ${key}: ${JSON.stringify(value)}`,
+        );
+        await kvStore.delete(fullKey);
+        return undefined;
+      }
+
+      return value;
+    },
+    delete: async (key: string): Promise<void> => {
+      if (IS_NOT_BROWSER) return; // handle SSR
+
+      await kvStore.delete(keyPrefix + key);
+    },
+    clear: async (): Promise<void> => {
+      if (IS_NOT_BROWSER) return; // handle SSR
+
+      await kvStore.clear();
+    },
+  };
 }
