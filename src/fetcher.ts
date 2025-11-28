@@ -36,7 +36,8 @@ export const fetcher = wretch().middlewares([
 ]);
 
 /**
- * Name this as `simpleFetcher` to make it easier to understand than `wretch`.
- * Use this if you don't want retries. Use `fetcher` if you want retries.
+ * Name this as `fetcherNoRetries` to make it easier to understand than
+ * `wretch`. Use this if you don't want retries. Use `fetcher` if you want
+ * retries.
  */
-export const simpleFetcher = wretch();
+export const fetcherNoRetries = wretch();
