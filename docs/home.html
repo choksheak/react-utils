@@ -87,7 +87,8 @@
             }
         }
 
-        p {
+        p,
+        ul {
             line-height: 2rem;
             font-size: 18px;
             letter-spacing: 0.5px;
@@ -163,6 +164,10 @@
         </p>
 
         <p style="display: flex; justify-content: center; gap: 6px; margin: 60px 0 120px;">
+            <a href="#WhyUseThis"
+                onClick="document.getElementById('GetStarted').scrollIntoView({behavior: 'smooth', block: 'start'}); return false">Why
+                Use This?</a>
+            ·
             <a href="#GetStarted"
                 onClick="document.getElementById('GetStarted').scrollIntoView({behavior: 'smooth', block: 'start'}); return false">Get
                 Started</a>
@@ -173,6 +178,46 @@
             <a href="reference/index.html" target="_blank">Docs</a>
             ·
             <a href="https://github.com/choksheak/react-utils" target="_blank">Source code</a>
+        </p>
+
+        <a id="WhyUseThis" name="WhyUseThis"></a>
+        <h3>Why Use This?</h3>
+
+        <p>
+            This package is built after similar open source packages like
+            <a href="https://tanstack.com/query/docs" target="_blank">TanStack Query</a>
+            and <a href="https://swr.vercel.app/" target="_blank">SWR</a>
+            existed. Why should you use this package instead of the others?
+            This package offers the following features which could potentially
+            be built into the other existing libraries, but requires a fair
+            bit of code and effort:
+        </p>
+
+        <ul>
+            <li>Strong type-checking support</li>
+            <li>Single, global definition of each shared state or shared query</li>
+            <li>Minimum configuration needed to use local storage or indexed DB persistence</li>
+            <li>Super high-performance client-side caching</li>
+            <li>Easy to understand and use with clean, consistent syntax </li>
+            <li>No setup needed with React context</li>
+            <li>Auto-expiring caches (both in-memory and persistent) with minimum effort needed</li>
+        </ul>
+
+        <p>
+            This means that if you use this package, as compared to the other
+            packages, it should always <b>save you both time and effort</b>, and
+            provide your code with <b>better performance</b>, with writing the
+            minimum amount of code needed to define what you actually want, with
+            <b>no boilerplate code needed</b>. The code you produce using this
+            library is almost always <b>more powerful</b>, <b>more concise</b>
+            and <b>more performant</b> than the code you could produce using
+            any other library that exists today (December 2025).
+        </p>
+
+        <p>
+            Please see the examples below and compare that to how much more
+            difficult it would be to produce the same functionality using any
+            other library.
         </p>
 
         <a id="GetStarted" name="GetStarted"></a>
