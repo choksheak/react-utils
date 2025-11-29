@@ -30,7 +30,9 @@
  *   // The first argument is the default value, which is required.
  *   // The second argument is an options object, and is optional (defaults
  *   // to storing in memory only without any persistence).
- *   const usersState = sharedState([], { indexedDbKey: "users" });
+ *   const usersState = sharedState(
+ *     [], { store: { persistTo: "indexedDb", key: "users" }}
+ *   );
  *
  *   export const UsersComponent: React.FC = () => {
  *     // Get both the value and the setter.

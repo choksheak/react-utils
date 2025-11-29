@@ -19,7 +19,7 @@
     "ci": "npm run lint && npm run tsc && npm run build && npm run test",
     "ls": "lint-staged",
     "clean": "rm -rf dist",
-    "docs": "rm -rf docs && typedoc `find src -name '*.ts' ! -name '*.test.ts'` --out docs --name 'Chok’s React Utilities'",
+    "docs": "typedoc && cp assets/index.html docs",
     "gen-types": "tsc --emitDeclarationOnly --declaration",
     "gen-exports": "tsx scripts/gen-exports.ts",
     "bump": "tsx scripts/bump-version.ts",
