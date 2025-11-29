@@ -1,6 +1,6 @@
 {
     "name": "Chok’s React Utilities",
-    "entryPoints": ["src/*.ts"],
+    "entryPoints": ["src/*.ts*"],
     "exclude": ["src/*.test.ts"],
     "customCss": "docs/custom.css",
     "out": "docs/reference"
