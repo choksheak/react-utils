@@ -294,8 +294,11 @@ export const listUsersQuery = sharedQuery({
     staleMs: MS_PER_HOUR,
 });
 
-export const ListUsersComponent: React.FC = () => {
+export const ListUsersComponent1: React.FC = () => {
     // Use the shared query to get data.
+    // Note that while you can also use the `const { data ... } =` syntax, it
+    // does not scale well when you need multiple shared queries in the same
+    // component, so we recommend using the `const listUsers =` syntax instead.
     const listUsers = useSharedQuery(listUsersQuery);
 
     return (
@@ -310,6 +313,25 @@ export const ListUsersComponent: React.FC = () => {
 
             {/* Assume that `listUsers.data` is an array of users. */}
             {listUsers.data?.map((user, index) => {
+                return &lt;User key={index} user={user} /&gt;
+            }) ?? "-"}
+        &lt;/&gt;
+    );
+};
+
+export const ListUsersComponent2: React.FC = () => {
+    // Example using the unpack assignment syntax.
+    const { loading, data, error } = useSharedQuery(listUsersQuery);
+
+    return (
+        &lt;&gt;
+            &lt;h1&gt;Users&lt;/h1&gt;
+
+            {loading && "Loading..."}
+
+            {!data && error ? String(error) : null}
+
+            {data?.map((user, index) => {
                 return &lt;User key={index} user={user} /&gt;
             }) ?? "-"}
         &lt;/&gt;
