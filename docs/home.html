@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Chok’s React Utilities</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/default.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/nnfx-light.min.css"
+        media="(prefers-color-scheme: light)">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/nnfx-dark.min.css"
+        media="(prefers-color-scheme: dark)">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/typescript.min.js"></script>
+    <script>hljs.highlightAll();</script>
+    <style>
+        @media (prefers-color-scheme: light) {
+            body {
+                background: linear-gradient(180deg, hsla(0, 0%, 100%, 0) 0, #fff 300px), fixed 0 0 /20px 20px radial-gradient(#d1d1d1 1px, transparent 0), fixed 10px 10px /20px 20px radial-gradient(#d1d1d1 1px, transparent 0);
+            }
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: linear-gradient(180deg, hsla(0, 0%, 0%, 0.5) 0, #000 300px), fixed 0 0 /20px 20px radial-gradient(#2e2e2e 1px, transparent 0), fixed 10px 10px /20px 20px radial-gradient(#2e2e2e 1px, transparent 0);
+            }
+        }
+
+        @media (prefers-color-scheme: light) {
+            body {
+                color: rgb(51, 65, 85);
+            }
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                color: rgb(224, 210, 190);
+            }
+        }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            font-family: ui-sans-serif, system-ui;
+        }
+
+        .content {
+            padding: 40px 60px;
+        }
+
+        h1 {
+            font-size: 36px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            margin: 0;
+        }
+
+        h2 {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        h3 {
+            font-size: 30px;
+            font-weight: 550;
+            border-bottom: 1px solid #ccc;
+            padding: 20px 0 10px;
+        }
+
+        h4 {
+            font-size: 20px;
+            font-weight: 550;
+            margin: 24px 0 16px;
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        @media (prefers-color-scheme: light) {
+            a {
+                color: rgb(0, 107, 230);
+            }
+        }
+
+        @media (prefers-color-scheme: dark) {
+            a {
+                color: rgb(255, 148, 25);
+            }
+        }
+
+        p {
+            line-height: 2rem;
+            font-size: 18px;
+            letter-spacing: 0.5px;
+            font-weight: 350;
+        }
+
+        pre {
+            margin: 0;
+        }
+
+        code {
+            font-size: 15px;
+            border: 1px solid #ddd;
+            background-color: #fdfdfd;
+            border-radius: 12px;
+            padding: 0 20px;
+            white-space-collapse: preserve;
+            overflow-x: auto;
+        }
+
+        @media (prefers-color-scheme: light) {
+            .footer {
+                background-color: rgb(243, 244, 246);
+            }
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .footer {
+                background-color: rgb(12, 11, 9);
+            }
+        }
+
+        .footer {
+            height: 100px;
+            padding: 30px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="content">
+
+        <div style="display: flex; flex-direction: column; gap: 16px; align-items: center; padding-bottom: 10px;">
+            <h2>@choksheak/react-utils</h2>
+            <h1>Chok’s React Utilities</h1>
+        </div>
+
+        <p>
+            This package is a time-tested collection of React utilities written
+            in TypeScript that I have personally needed in almost every project
+            that I have worked in. Making this an open source, public npm
+            package allows me to share this code freely with others as well as
+            using it for my own personal and professional projects. Feel free
+            to use it in your own projects without any restrictions.
+        </p>
+
+        <p>
+            The code supports full tree-shaking. Therefore your code will only
+            grow in size by whatever you use. Any code that you are not using
+            will not contribute to your code size.
+        </p>
+
+        <p
+            style="background-color: rgb(250, 250, 202); padding: 10px 20px; border: 1px solid rgb(244, 214, 19); border-radius: 20px; color: rgb(155, 103, 0); display: flex; gap: 12px;">
+            <span style="font-size: 30px; transform: translateY(7px);">🚀</span>
+            <span>
+                <b style="font-weight: 600;">@choksheak/react-utils</b>
+                allows you to reuse common React+Typescript functions without
+                reinventing the wheels, thus <b>saving you time</b> and
+                <b>reducing the size of your code</b>.
+            </span>
+        </p>
+
+        <p style="display: flex; justify-content: center; gap: 6px; margin: 60px 0 120px;">
+            <a href="#GetStarted"
+                onClick="document.getElementById('GetStarted').scrollIntoView({behavior: 'smooth', block: 'start'}); return false">Get
+                Started</a>
+            ·
+            <a href="#Examples"
+                onClick="document.getElementById('Examples').scrollIntoView({behavior: 'smooth', block: 'start'}); return false">Examples</a>
+            ·
+            <a href="reference/index.html" target="_blank">Docs</a>
+            ·
+            <a href="https://github.com/choksheak/react-utils" target="_blank">Source code</a>
+        </p>
+
+        <a id="GetStarted" name="GetStarted"></a>
+        <h3>Get Started</h3>
+
+        <p>
+            Install the package using the standard package manager command:
+        </p>
+
+        <pre><code class="language-plaintext">npm i @choksheak/react-utils</code></pre>
+
+        <a id="Examples" name="Examples"></a>
+        <h3>Examples</h3>
+
+        <!-- fetcher -->
+
+        <h4>
+            fetcher.ts
+            <a href="reference/modules/fetcher.html" target="_blank" style="display:flex">
+                <img src="images/openIcon.svg" style="width:20px;height:20px;" />
+            </a>
+        </h4>
+
+        <pre><code>import { fetcher } from "@choksheak/react-utils/fetcher";
+
+// Fetch some data from the server, with auto-retries.
+const data = await fetcher.url("/api/get-user-data").get();
+
+// Print data which should be a json object.
+console.log(`Fetched data:`, data);</code></pre>
+
+        <!-- NoSSR -->
+
+        <h4>
+            NoSSR.ts
+            <a href="reference/modules/NoSSR.html" target="_blank" style="display:flex">
+                <img src="images/openIcon.svg" style="width:20px;height:20px;" />
+            </a>
+        </h4>
+
+        <pre><code>"use client";
+
+import { NoSSR } from "@choksheak/react-utils/NoSSR";
+
+export const ClientSideOnlyComponent: React.FC = () => {
+    // Ensure that the component only gets rendered on the client side.
+    return (
+        &lt;NoSSR&gt;
+            &lt;ComponentThatOnlyRendersOnTheClientSide /&gt;
+        &lt;/NoSSR&gt;
+    );
+};</code></pre>
+
+        <!-- sharedQuery -->
+
+        <h4>
+            sharedQuery.ts
+            <a href="reference/modules/sharedQuery.html" target="_blank" style="display:flex">
+                <img src="images/openIcon.svg" style="width:20px;height:20px;" />
+            </a>
+        </h4>
+
+        <pre><code>"use client";
+
+import { fetcher } from "@choksheak/react-utils/fetcher";
+import { sharedQuery, useSharedQuery } from "@choksheak/react-utils/sharedQuery";
+import { MS_PER_HOUR } from "@choksheak/ts-utils/timeConstants";
+
+// Create a shared query object that is reusable in other parts of the code.
+export const listUsersQuery = sharedQuery({
+    queryName: "listUsers",
+    queryFn: () => fetcher.url("/api/list-users").get(),
+    persistTo: "indexedDb",
+    staleMs: MS_PER_HOUR,
+});
+
+export const ListUsersComponent: React.FC = () => {
+    // Use the shared query to get data.
+    const listUsers = useSharedQuery(listUsersQuery);
+
+    return (
+        &lt;&gt;
+            &lt;h1&gt;Users&lt;/h1&gt;
+
+            {/* Inform the user that the data is loading. */}
+            {listUsers.loading && "Loading..."}
+
+            {/* If the data is available, don't show the error. */}
+            {!listUsers.data && listUsers.error ? String(listUsers.error) : null}
+
+            {/* Assume that `listUsers.data` is an array of users. */}
+            {listUsers.data?.map((user, index) => {
+                return &lt;User key={index} user={user} /&gt;
+            }) ?? "-"}
+        &lt;/&gt;
+    );
+};</code></pre>
+
+        <!-- sharedState -->
+
+        <h4>
+            sharedState.tsx
+            <a href="reference/modules/sharedState.html" target="_blank" style="display:flex">
+                <img src="images/openIcon.svg" style="width:20px;height:20px;" />
+            </a>
+        </h4>
+
+        <pre><code>"use client";
+
+import { sharedState } from "@choksheak/react-utils/sharedState";
+
+// Create a shared state that can be reused anywhere in the code.
+export const fullNameState = sharedState(
+    "", { store: { persistTo: "indexedDb", key: "fullName" }}
+);
+
+export const FullNameInput: React.FC = () => {
+    // Think of `useSharedState` as like `useState`.
+    const [fullName, setFullName] = useSharedState(fullNameState);
+
+    return (
+        &lt;&gt;
+            Full name:
+            &amp;nbsp;
+            &lt;input
+                type="text"
+                value={fullName}
+                onChange={(e) =&gt; setFullName(e.target.value)}
+            /&gt;
+        &lt;/&gt;
+    );
+};</code></pre>
+
+        <h3>Reference</h3>
+
+        For more details about each module, please refer to the
+        <a href="reference/index.html" target="_blank">Reference Documentation</a>
+
+    </div>
+
+    <div class="footer">💙 &nbsp;Enjoy using this library! &nbsp;😎</div>
+</body>
+
+</html>
