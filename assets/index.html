@@ -70,6 +70,9 @@
             font-size: 20px;
             font-weight: 550;
             margin: 24px 0 16px;
+            display: flex;
+            gap: 4px;
+            align-items: center;
         }
 
         @media (prefers-color-scheme: light) {
@@ -186,7 +189,12 @@
 
         <!-- fetcher -->
 
-        <h4>fetcher.ts</h4>
+        <h4>
+            fetcher.ts
+            <a href="reference/modules/fetcher.html" target="_blank" style="display:flex">
+                <img src="images/openIcon.svg" style="width:20px;height:20px;" />
+            </a>
+        </h4>
 
         <pre><code>import { fetcher } from "@choksheak/react-utils/fetcher";
 
@@ -198,7 +206,12 @@ console.log(`Fetched data:`, data);</code></pre>
 
         <!-- NoSSR -->
 
-        <h4>NoSSR.tsx</h4>
+        <h4>
+            NoSSR.ts
+            <a href="reference/modules/NoSSR.html" target="_blank" style="display:flex">
+                <img src="images/openIcon.svg" style="width:20px;height:20px;" />
+            </a>
+        </h4>
 
         <pre><code>"use client";
 
@@ -215,7 +228,12 @@ export const ClientSideOnlyComponent: React.FC = () => {
 
         <!-- sharedQuery -->
 
-        <h4>sharedQuery.ts</h4>
+        <h4>
+            sharedQuery.ts
+            <a href="reference/modules/sharedQuery.html" target="_blank" style="display:flex">
+                <img src="images/openIcon.svg" style="width:20px;height:20px;" />
+            </a>
+        </h4>
 
         <pre><code>"use client";
 
@@ -255,7 +273,12 @@ export const ListUsersComponent: React.FC = () => {
 
         <!-- sharedState -->
 
-        <h4>sharedState.tsx</h4>
+        <h4>
+            sharedState.tsx
+            <a href="reference/modules/sharedState.html" target="_blank" style="display:flex">
+                <img src="images/openIcon.svg" style="width:20px;height:20px;" />
+            </a>
+        </h4>
 
         <pre><code>"use client";
 

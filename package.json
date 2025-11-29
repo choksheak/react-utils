@@ -19,7 +19,7 @@
     "ci": "npm run lint && npm run tsc && npm run build && npm run test",
     "ls": "lint-staged",
     "clean": "rm -rf dist",
-    "docs": "typedoc && cp assets/index.html docs",
+    "docs": "typedoc && cp -r assets/index.html assets/images docs",
     "gen-types": "tsc --emitDeclarationOnly --declaration",
     "gen-exports": "tsx scripts/gen-exports.ts",
     "bump": "tsx scripts/bump-version.ts",
