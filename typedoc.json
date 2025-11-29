@@ -2,6 +2,6 @@
     "name": "Chok’s React Utilities",
     "entryPoints": ["src/*.ts"],
     "exclude": ["src/*.test.ts"],
-    "customCss": "assets/custom.css",
+    "customCss": "docs/custom.css",
     "out": "docs/reference"
 }
