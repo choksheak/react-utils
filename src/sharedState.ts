@@ -54,7 +54,6 @@
  * ```
  */
 
-import { StorageAdapter } from "@choksheak/ts-utils/storageAdapter";
 import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
 import { Dispatch, SetStateAction, useSyncExternalStore } from "react";
 
@@ -155,7 +154,7 @@ function createPubSubStore() {
         if (subscribers.size === 0) subscribersByKey.delete(key);
       };
     },
-  };
+  } as const;
 }
 
 const pubSubStore = createPubSubStore();
@@ -173,129 +172,6 @@ export type SharedStateOptions<T> = {
 
 let stateKey = 0;
 
-/** Please use sharedState() instead. */
-export class SharedState<T> {
-  private readonly pubSubKey: string;
-  private readonly storageAdapter: StorageAdapter<T> | null;
-  public readonly setValueBounded: Dispatch<SetStateAction<T>>;
-  public initStarted = false;
-  public initDone = false;
-
-  // Allow users to await for the completion of data init.
-  public readonly readyPromise: Promise<void>;
-  private readonly resolveReadyPromise: () => void;
-
-  public constructor(
-    private readonly defaultValue: T,
-    options?: SharedStateOptions<T>,
-  ) {
-    let readyResolve: () => void = () => {};
-
-    this.readyPromise = new Promise<void>((resolve) => {
-      readyResolve = resolve;
-    });
-
-    this.resolveReadyPromise = readyResolve;
-
-    this.pubSubKey = String(stateKey++);
-
-    // Use max of 1 storage adapter per shared state.
-    this.storageAdapter = getStorageAdapter(
-      options,
-      SharedStateConfig.storeExpiryMs,
-    );
-
-    // Same as this.setValue, but binding the `this` reference.
-    this.setValueBounded = (next: SetStateAction<T>) => {
-      this.setValue(next);
-    };
-
-    // Always set the default value first to avoid returning undefineds if that
-    // is not part of T.
-    pubSubStore.setNoNotify(this.pubSubKey, defaultValue);
-
-    const lazyLoad = options?.lazyLoad;
-    const lazy = lazyLoad !== undefined ? lazyLoad : SharedStateConfig.lazyLoad;
-
-    if (!lazy) {
-      void this.initDefaultValueOnce();
-    }
-  }
-
-  /** `subscribe` function required by useSyncExternalStore. */
-  public subscribe(subscriber: () => void): () => void {
-    return pubSubStore.subscribe(this.pubSubKey, () => subscriber());
-  }
-
-  /** Returns true if there is a backing store. */
-  public hasStore(): boolean {
-    return Boolean(this.storageAdapter);
-  }
-
-  /**
-   * Set a value directly into the store. Does nothing if there is no
-   * backing store.
-   *
-   * Warning: If you want to set the value properly, you should use
-   * `setValue()` instead which also updates the in-memory copy.
-   */
-  public async setInStore(value: T): Promise<void> {
-    return await this.storageAdapter?.set(STORAGE_KEY, value);
-  }
-
-  /**
-   * Get a value directly from the store. Returns undefined if there is no
-   * backing store.
-   */
-  public async getFromStore(): Promise<T | undefined> {
-    return await this.storageAdapter?.get(STORAGE_KEY);
-  }
-
-  /**
-   * Get the value of the shared state.
-   *  `getSnapshot` function — must return same ref if value unchanged.
-   * Note that this would return the default value if data init from store is
-   * not completed yet.
-   */
-  public getSnapshot(): T {
-    return pubSubStore.get(this.pubSubKey);
-  }
-
-  /** Set the value of the shared state. */
-  public setValue(next: SetStateAction<T>): void {
-    if (typeof next === "function") {
-      const prev = pubSubStore.get<T>(this.pubSubKey);
-      next = (next as (p: T) => T)(prev);
-    }
-
-    pubSubStore.set(this.pubSubKey, next);
-    void this.setInStore(next);
-  }
-
-  /**
-   * Remove the value of the shared state. Actually this just sets the value
-   * back to the given default value.
-   */
-  public delete() {
-    pubSubStore.set(this.pubSubKey, this.defaultValue);
-    void this.storageAdapter?.set(STORAGE_KEY, this.defaultValue);
-  }
-
-  /** Initial default handling. */
-  public async initDefaultValueOnce() {
-    if (this.initDone || this.initStarted) return;
-    this.initStarted = true;
-
-    const stored = await this.getFromStore();
-    const value = stored !== undefined ? stored : this.defaultValue;
-
-    pubSubStore.set(this.pubSubKey, value);
-
-    this.initDone = true;
-    this.resolveReadyPromise();
-  }
-}
-
 /**
  * Create a new shared state object. Put this code at the top level scope:
  *
@@ -307,9 +183,123 @@ export class SharedState<T> {
 export function sharedState<T>(
   defaultValue: T,
   options?: SharedStateOptions<T>,
-): SharedState<T> {
-  return new SharedState(defaultValue, options);
+) {
+  let readyResolve: () => void = () => {};
+
+  const readyPromise = new Promise<void>((resolve) => {
+    readyResolve = resolve;
+  });
+
+  const resolveReadyPromise = readyResolve;
+
+  const pubSubKey = String(stateKey++);
+
+  // Use max of 1 storage adapter per shared state.
+  const storageAdapter = getStorageAdapter(
+    options,
+    SharedStateConfig.storeExpiryMs,
+  );
+
+  // Always set the default value first to avoid returning undefineds if that
+  // is not part of T.
+  pubSubStore.setNoNotify(pubSubKey, defaultValue);
+
+  const lazyLoad = options?.lazyLoad;
+  const lazy = lazyLoad !== undefined ? lazyLoad : SharedStateConfig.lazyLoad;
+
+  const obj = {
+    /** Allow users to await for the completion of data init. */
+    readyPromise,
+
+    lazy,
+
+    initStarted: false,
+    initDone: false,
+
+    /** `subscribe` function required by useSyncExternalStore. */
+    subscribe(subscriber: () => void): () => void {
+      return pubSubStore.subscribe(pubSubKey, () => subscriber());
+    },
+
+    /** Returns true if there is a backing store. */
+    hasStore(): boolean {
+      return Boolean(storageAdapter);
+    },
+
+    /**
+     * Set a value directly into the store. Does nothing if there is no
+     * backing store.
+     *
+     * Warning: If you want to set the value properly, you should use
+     * `setValue()` instead which also updates the in-memory copy.
+     */
+    async setInStore(value: T): Promise<void> {
+      return await storageAdapter?.set(STORAGE_KEY, value);
+    },
+
+    /**
+     * Get a value directly from the store. Returns undefined if there is no
+     * backing store.
+     */
+    async getFromStore(): Promise<T | undefined> {
+      return await storageAdapter?.get(STORAGE_KEY);
+    },
+
+    /**
+     * Get the value of the shared state.
+     *  `getSnapshot` function — must return same ref if value unchanged.
+     * Note that this would return the default value if data init from store is
+     * not completed yet.
+     */
+    getSnapshot(): T {
+      return pubSubStore.get(pubSubKey);
+    },
+
+    /** Set the value of the shared state. */
+    setValue(next: SetStateAction<T>): void {
+      if (typeof next === "function") {
+        const prev = pubSubStore.get<T>(pubSubKey);
+        next = (next as (p: T) => T)(prev);
+      }
+
+      pubSubStore.set(pubSubKey, next);
+      void obj.setInStore(next);
+    },
+
+    /**
+     * Remove the value of the shared state. Actually this just sets the value
+     * back to the given default value.
+     */
+    delete() {
+      pubSubStore.set(pubSubKey, defaultValue);
+      void storageAdapter?.set(STORAGE_KEY, defaultValue);
+    },
+
+    /** Initial default handling. */
+    async initDefaultValueOnce() {
+      if (obj.initDone || obj.initStarted) return;
+      // @ts-expect-error ts(2540) - Assign to readonly property.
+      obj.initStarted = true;
+
+      const stored = await obj.getFromStore();
+      const value = stored !== undefined ? stored : defaultValue;
+
+      pubSubStore.set(pubSubKey, value);
+
+      // @ts-expect-error ts(2540) - Assign to readonly property.
+      obj.initDone = true;
+      resolveReadyPromise();
+    },
+  } as const;
+
+  if (!lazy) {
+    void obj.initDefaultValueOnce();
+  }
+
+  return obj;
 }
+
+export type SharedState<T> = ReturnType<typeof sharedState<T>>;
 
 /**
  * React hook for subscribing to a key in the global store.
@@ -322,7 +312,7 @@ export function sharedState<T>(
 export function useSharedState<T>(
   state: SharedState<T>,
 ): [T, Dispatch<SetStateAction<T>>] {
-  state.initDefaultValueOnce();
+  void state.initDefaultValueOnce();
 
   const value = useSyncExternalStore(
     (onStoreChange) => state.subscribe(onStoreChange),
@@ -331,7 +321,7 @@ export function useSharedState<T>(
     () => state.getSnapshot(),
   );
 
-  return [value, state.setValueBounded];
+  return [value, state.setValue];
 }
 
 /**
@@ -355,5 +345,7 @@ export function useSharedStateValue<T>(state: SharedState<T>) {
  * ```
  */
 export function useSharedStateSetter<T>(state: SharedState<T>) {
-  return useSharedState(state)[1];
+  void state.initDefaultValueOnce();
+
+  return state.setValue;
 }
