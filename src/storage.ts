@@ -11,7 +11,7 @@
 
 import { Duration } from "@choksheak/ts-utils/duration";
 import { kvStore } from "@choksheak/ts-utils/kvStore";
-import { LocalStore } from "@choksheak/ts-utils/localStore";
+import { createLocalStore } from "@choksheak/ts-utils/localStore";
 import { StorageAdapter } from "@choksheak/ts-utils/storageAdapter";
 
 /** List of all available pre-built persistence options. */
@@ -95,7 +95,7 @@ export function localStoreAdapter<T>({
   expiryMs,
   isValid,
 }: StoreConstructorArgs) {
-  const adapter = new LocalStore(key, { defaultExpiryMs: expiryMs });
+  const adapter = createLocalStore(key, { defaultExpiryMs: expiryMs });
 
   return {
     set: (key: string, value: T): void => {

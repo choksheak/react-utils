@@ -89,59 +89,17 @@ export function configureSharedState(config: Partial<SharedStateConfig>) {
 }
 
 /************************************************************************/
-/* Shared state implementation                                          */
+/* Pub-sub store
 /************************************************************************/
 
 type Subscriber<T> = (next: T, prev: T) => void;
 
-class PubSubStore {
-  private dataByKey = new Map<string, unknown>();
-  private subscribersByKey = new Map<string, Set<Subscriber<unknown>>>();
+function createPubSubStore() {
+  const dataByKey = new Map<string, unknown>();
+  const subscribersByKey = new Map<string, Set<Subscriber<unknown>>>();
 
-  // This could be undefined if T includes undefined, else it should never
-  // return undefined because the user has to always specify the default value.
-  public get<T>(key: string): T {
-    return this.dataByKey.get(key) as T;
-  }
-
-  public set<T>(key: string, value: T): void {
-    const prev = this.dataByKey.get(key) as T;
-
-    // Do nothing if no change.
-    if (prev === value) return;
-
-    this.dataByKey.set(key, value);
-    this.notify(key, value, prev);
-  }
-
-  public delete(key: string): void {
-    this.dataByKey.delete(key);
-  }
-
-  public setNoNotify<T>(key: string, value: T): void {
-    this.dataByKey.set(key, value);
-  }
-
-  // Subscribe to changes of a specific key
-  public subscribe<T>(key: string, subscriber: Subscriber<T>): () => void {
-    let subscribers = this.subscribersByKey.get(key);
-    if (!subscribers) {
-      subscribers = new Set();
-      this.subscribersByKey.set(key, subscribers);
-    }
-
-    // Type coercion: we store Subscriber<unknown>
-    subscribers.add(subscriber as Subscriber<unknown>);
-
-    // Return unsubscribe function
-    return () => {
-      subscribers.delete(subscriber as Subscriber<unknown>);
-      if (subscribers.size === 0) this.subscribersByKey.delete(key);
-    };
-  }
-
-  private notify<T>(key: string, next: T, prev: T): void {
-    const subscribers = this.subscribersByKey.get(key);
+  function notify<T>(key: string, next: T, prev: T): void {
+    const subscribers = subscribersByKey.get(key);
     if (!subscribers) return;
 
     // Make copy to protect against mutation during iteration.
@@ -154,9 +112,57 @@ class PubSubStore {
       }
     }
   }
+
+  return {
+    // This could be undefined if T includes undefined, else it should never
+    // return undefined because the user has to always specify the default value.
+    get<T>(key: string): T {
+      return dataByKey.get(key) as T;
+    },
+
+    set<T>(key: string, value: T): void {
+      const prev = dataByKey.get(key) as T;
+
+      // Do nothing if no change.
+      if (prev === value) return;
+
+      dataByKey.set(key, value);
+      notify(key, value, prev);
+    },
+
+    delete(key: string): void {
+      dataByKey.delete(key);
+    },
+
+    setNoNotify<T>(key: string, value: T): void {
+      dataByKey.set(key, value);
+    },
+
+    // Subscribe to changes of a specific key
+    subscribe<T>(key: string, subscriber: Subscriber<T>): () => void {
+      let subscribers = subscribersByKey.get(key);
+      if (!subscribers) {
+        subscribers = new Set();
+        subscribersByKey.set(key, subscribers);
+      }
+
+      // Type coercion: we store Subscriber<unknown>
+      subscribers.add(subscriber as Subscriber<unknown>);
+
+      // Return unsubscribe function
+      return () => {
+        subscribers.delete(subscriber as Subscriber<unknown>);
+        if (subscribers.size === 0) subscribersByKey.delete(key);
+      };
+    },
+  };
 }
 
-const pubSubStore = new PubSubStore();
+const pubSubStore = createPubSubStore();
+
+/************************************************************************/
+/* Shared state implementation                                          */
+/************************************************************************/
 
 const STORAGE_KEY = "state";
 
