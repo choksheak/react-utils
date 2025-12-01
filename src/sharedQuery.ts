@@ -94,12 +94,7 @@ import {
   useState,
 } from "react";
 
-import {
-  SharedState,
-  sharedState,
-  SharedStateOptions,
-  useSharedState,
-} from "./sharedState";
+import { sharedState, SharedStateOptions, useSharedState } from "./sharedState";
 import { PersistTo } from "./storage";
 import { stringifyDeterministicForKeys } from "./stringify";
 import { useDeepMemo } from "./useDeepMemo";
@@ -148,7 +143,7 @@ export type UseQueryResult<TData> = QueryStateValue<TData> &
     /**
      * Manually refresh the data by doing a new query.
      */
-    refetch: () => void;
+    refetch: () => Promise<void>;
 
     /**
      * If you got the data from somewhere else (e.g. an in-memory data update),
@@ -267,347 +262,106 @@ export function configureSharedQuery(config: Partial<SharedQueryConfig>) {
 /** Whether this is a normal query or an explicit refetch. */
 type QueryType = "query" | "refetch";
 
-/** Please use sharedQuery() instead. */
-export class SharedQuery<TArgs extends unknown[], TData> {
-  private readonly inflightQueries = new Map<
+// Disallow duplicate query names.
+const seenQueryNames = new Set<string>();
+
+/**
+ * Create a reusable shared query object that can be used to auto de-duplicate
+ * and cache all data fetches, with auto-expiration and staleness checks.
+ *
+ * Each `queryName` must be unique, and can only be declared once, most often
+ * in the top level scope. The queryName is mainly used for logging and also
+ * used as the storage key when you use the top-level `persistTo`.
+ *
+ * Example:
+ * ```
+ *   export const usersQuery = sharedQuery({
+ *     queryName: "users",
+ *     queryFn: listUsers,
+ *     persistTo: "indexedDb",
+ *     staleMs: MS_PER_DAY,
+ *   });
+ * ```
+ */
+export function sharedQuery<TArgs extends unknown[], TData>(
+  // The name could have been auto-generated, but we let the user give us a
+  // human-readable name that can be identified quickly in the logs.
+  options: SharedQueryOptions<TArgs, TData>,
+) {
+  if (seenQueryNames.has(options.queryName)) {
+    throw new Error(`Duplicate shared query name "${options.queryName}"`);
+  }
+  seenQueryNames.add(options.queryName);
+
+  const inflightQueries = new Map<
     string,
     { promise: Promise<TData>; abortController: AbortController }
   >();
-
-  public readonly queryState: SharedState<SharedQueryState<TData>>;
 
   /**
    * Keep track of the mounted query keys. This handles the case where an
    * earlier-started query returns later, and when it returns, it was already
    * unmounted, thus making it eligible for clean up right after fetch.
    */
-  private readonly mountedKeys = new Map<string, number>();
+  const mountedKeys = new Map<string, number>();
 
-  public readonly queryName: string;
-  public readonly queryFn: QueryFn<TArgs, TData>;
-  public readonly refetchFn: QueryFn<TArgs, TData> | undefined;
-  public readonly expiryMs: number;
-  public readonly staleMs: number;
-  public readonly refetchOnStale: boolean;
-  public readonly maxSize: number;
-  public readonly maxBytes: number;
-  public readonly keepLastNonEmptyData: boolean;
-  public readonly log: (...args: unknown[]) => void;
+  const queryName = options.queryName;
+  const queryFn = options.queryFn;
+  const refetchFn = options.refetchFn;
 
-  public constructor(options: SharedQueryOptions<TArgs, TData>) {
-    this.queryName = options.queryName;
-    this.queryFn = options.queryFn;
-    this.refetchFn = options.refetchFn;
+  const staleMs = options?.staleMs ?? SharedQueryConfig.staleMs;
+  const expiryMs = options?.expiryMs ?? SharedQueryConfig.expiryMs;
 
-    this.staleMs = options?.staleMs ?? SharedQueryConfig.staleMs;
-    this.expiryMs = options?.expiryMs ?? SharedQueryConfig.expiryMs;
+  const refetchOnStale =
+    options?.refetchOnStale ?? SharedQueryConfig.refetchOnStale;
 
-    this.refetchOnStale =
-      options?.refetchOnStale ?? SharedQueryConfig.refetchOnStale;
+  // Apply shortcut when using `persistTo`.
+  // Specifying the `store` will take precedence over `persistTo`.
+  if (!options.store) {
+    const persistTo = options.persistTo ?? SharedQueryConfig.persistTo;
 
-    // Apply shortcut when using `persistTo`.
-    // Specifying the `store` will take precedence over `persistTo`.
-    if (!options.store) {
-      const persistTo = options.persistTo ?? SharedQueryConfig.persistTo;
-
-      if (persistTo) {
-        options.store = {
-          persistTo,
-          key: options.queryName,
-          expiryMs: this.expiryMs,
-        };
-      }
+    if (persistTo) {
+      options.store = {
+        persistTo,
+        key: queryName,
+        expiryMs,
+      };
     }
-
-    this.maxSize = options?.maxSize ?? SharedQueryConfig.maxSize;
-    this.maxBytes = options?.maxBytes ?? SharedQueryConfig.maxBytes;
-
-    this.keepLastNonEmptyData = Boolean(options?.keepLastNonEmptyData);
-
-    this.log = options?.log ?? SharedQueryConfig.log;
-
-    this.queryState = sharedState<SharedQueryState<TData>>(
-      {}, // defaultValue
-      options,
-    );
   }
 
-  /** Returns a key to identify requests based on the given args. */
-  public getQueryKey(args: TArgs): string {
-    return this.queryName + ":" + stringifyDeterministicForKeys(args);
-  }
+  const maxSize = options?.maxSize ?? SharedQueryConfig.maxSize;
+  const maxBytes = options?.maxBytes ?? SharedQueryConfig.maxBytes;
 
-  /**
-   * Get the AbortController to abort the inflight query (if any).
-   *
-   * Note that once you get the controller, you can also get the signal easily
-   * using `controller.signal`. So if you need both the controller and the
-   * signal, just use this function.
-   */
-  public getAbortController(args: TArgs): AbortController | null {
-    const queryKey = this.getQueryKey(args);
-    return this.getAbortControllerByKey(queryKey);
-  }
+  const keepLastNonEmptyData = Boolean(options?.keepLastNonEmptyData);
 
-  public getAbortControllerByKey(queryKey: string): AbortController | null {
-    return this.inflightQueries.get(queryKey)?.abortController ?? null;
-  }
+  const log = options?.log ?? SharedQueryConfig.log;
 
-  /**
-   * Get the AbortSignal to check for query abortions.
-   *
-   * Example:
-   * ```
-   *   const getUserQuery = sharedQuery({
-   *     queryName: "getUser",
-   *     queryFn: (userId: string) => {
-   *       // Get the signal for this current execution.
-   *       const signal = getUserQuery.getAbortSignal([userId]);
-   *
-   *       // Pass the signal to fetch so that it can be aborted.
-   *       const response = await fetch(`/users/${userId}`, { signal });
-   *
-   *       // Check for errors.
-   *       if (!response.ok) {
-   *         throw new Error(response.statusText);
-   *       }
-   *
-   *       // Return the data.
-   *       return await response.json();
-   *     },
-   *   });
-   * ```
-   */
-  public getAbortSignal(args: TArgs): AbortSignal | null {
-    const queryKey = this.getQueryKey(args);
-    return this.getAbortSignalByKey(queryKey);
-  }
+  const queryState = sharedState<SharedQueryState<TData>>(
+    {}, // defaultValue
+    options,
+  );
 
-  public getAbortSignalByKey(queryKey: string): AbortSignal | null {
-    return this.getAbortControllerByKey(queryKey)?.signal ?? null;
-  }
-
-  private isStale(dataUpdatedMs: number): boolean {
-    if (this.staleMs === 0) return true; // always stale
+  function isStale(dataUpdatedMs: number): boolean {
+    if (staleMs === 0) return true; // always stale
 
     const ageMs = Date.now() - dataUpdatedMs;
-    return ageMs > this.staleMs;
+    return ageMs > staleMs;
   }
 
-  private isExpired(dataUpdatedMs: number): boolean {
-    if (this.expiryMs === 0) return false; // never expire
+  function isExpired(dataUpdatedMs: number): boolean {
+    if (expiryMs === 0) return false; // never expire
 
     const ageMs = Date.now() - dataUpdatedMs;
-    return ageMs > this.expiryMs;
+    return ageMs > expiryMs;
   }
 
-  /** For cached data, we need to return the correct timestamps as well. */
-  public async getCachedOrFetch(
-    ...args: TArgs
-  ): Promise<QueryStateValue<TData>> {
-    // Important: wait for data to be loaded from cache first before trying to
-    // fetch from server. This fixes a bad bug where the data is big, and the
-    // code here starts a server fetch before the cache data loaded.
-    const startMs = Date.now();
-    await this.queryState.readyPromise;
-    const waitedMs = Date.now() - startMs;
-
-    const queryKey = this.getQueryKey(args);
-    const cached = this.queryState.getSnapshot()?.[queryKey];
-
-    if (waitedMs) {
-      this.log(`${queryKey}: Waited for ${waitedMs}ms before data is ready`);
-    }
-
-    if (cached?.data && !this.isExpired(cached.dataUpdatedMs ?? 0)) {
-      // Return cached value if not stale.
-      if (!this.isStale(cached.dataUpdatedMs ?? 0)) {
-        this.log(`Return fresh data ${queryKey} from cache without fetching`);
-        return cached;
-      }
-
-      // If stale, optionally update the data in the background.
-      if (this.refetchOnStale) {
-        this.log(`refetchOnStale for ${queryKey}`);
-        void this.dedupedFetch(queryKey, "query", ...args);
-      }
-
-      // Still return stale data immediately.
-      this.log(`Returning stale data for ${queryKey}`);
-      return cached;
-    }
-
-    const data = await this.dedupedFetch(queryKey, "query", ...args);
-    const now = Date.now();
-
-    return {
-      // Don't keep old error.
-      lastUpdatedMs: now,
-      loading: false,
-      data,
-      dataUpdatedMs: now,
-    };
-  }
-
-  private dedupedFetch(
-    queryKey: string,
-    queryType: QueryType,
-    ...args: TArgs
-  ): Promise<TData> {
-    const inflightQuery = this.inflightQueries.get(queryKey);
-
-    // De-duplicate in-flight requests. Note that queries and refetches are
-    // also deduped because they should technically be trying to fetch the same
-    // data.
-    if (inflightQuery) {
-      this.log(
-        `Deduplicating inflight fetch for ${queryKey}, queryType=${queryType}`,
-      );
-      return inflightQuery.promise;
-    }
-
-    // Fetch new data
-    const promise = this.startFetching(queryKey, queryType, args);
-    const abortController = new AbortController();
-
-    this.inflightQueries.set(queryKey, { promise, abortController });
-
-    return promise;
-  }
-
-  private async startFetching(
-    queryKey: string,
-    queryType: QueryType,
-    args: TArgs,
-  ) {
-    this.log(`Start fetching ${queryKey}, queryType=${queryType}`);
-
-    try {
-      const data = await (queryType === "refetch" && this.refetchFn
-        ? this.refetchFn(...args)
-        : this.queryFn(...args));
-
-      this.log(`Successfully fetched ${queryKey}`);
-      this.setData(queryKey, data, Date.now());
-      return data;
-    } catch (e) {
-      this.log(`Failed to fetch ${queryKey} for queryType=${queryType}: ${e}`);
-      throw e;
-    } finally {
-      this.inflightQueries.delete(queryKey);
-    }
-  }
-
-  /** Get the entire stored entry for a query key. */
-  public getQueryValue(queryKey: string): QueryStateValue<TData> | undefined {
-    return this.queryState.getSnapshot()?.[queryKey];
-  }
-
-  /** Get the current stored data for a query key. */
-  public getData(queryKey: string): TData | undefined {
-    const stateValue: QueryStateValue<TData> | undefined =
-      this.queryState.getSnapshot()?.[queryKey];
-
-    // Check for expiration.
-    if (stateValue?.lastUpdatedMs) {
-      if (this.isExpired(stateValue.lastUpdatedMs)) {
-        this.deleteData(queryKey);
-        return undefined;
-      }
-    }
-
-    return stateValue?.data;
-  }
-
-  /** Set the data directly if the user obtained it from somewhere else. */
-  public setData(
-    queryKey: string,
-    data: TData,
-    dataUpdatedMs = Date.now(),
-  ): void {
-    const entry: QueryStateValue<TData> = {
-      lastUpdatedMs: Date.now(),
-      loading: false,
-      data,
-      dataUpdatedMs,
-    };
-
-    this.queryState.setValue((prev) => ({ ...prev, [queryKey]: entry }));
-
-    this.enforceSizeLimit();
-  }
-
-  /**
-   * Do a new fetch even when the data is already cached, but don't fetch if
-   * another fetch is already inflight.
-   */
-  public async updateFromSource(...args: TArgs): Promise<TData> {
-    const key = this.getQueryKey(args);
-    return await this.dedupedFetch(key, "query", ...args);
-  }
-
-  /**
-   * Perform an explicit refetch. If `options.refetchFn` was not specified,
-   * then this would be identical to calling `this.updateFromSource()`.
-   */
-  public async refetch(...args: TArgs): Promise<TData> {
-    const key = this.getQueryKey(args);
-    return await this.dedupedFetch(key, "refetch", ...args);
-  }
-
-  /** Delete the cached data for one set of arguments. */
-  public deleteData(queryKey: string): void {
-    const record = this.queryState.getSnapshot();
-    const clone = { ...record };
-    delete clone[queryKey];
-    this.queryState.setValue(clone);
-
-    const inflight = this.inflightQueries.get(queryKey);
-    if (inflight) {
-      this.inflightQueries.delete(queryKey);
-      inflight.abortController.abort("Deleted");
-    }
-  }
-
-  /** Delete all currently cached data & all inflight promises. */
-  public clear(): void {
-    this.queryState.delete();
-
-    for (const { abortController } of Array.from(
-      this.inflightQueries.values(),
-    )) {
-      abortController.abort("Cleared");
-    }
-
-    this.inflightQueries.clear();
-  }
-
-  /** Keep track of mounted keys. */
-  public mount(queryKey: string): void {
-    this.mountedKeys.set(queryKey, (this.mountedKeys.get(queryKey) ?? 0) + 1);
-  }
-
-  /** Clean up mounted keys. */
-  public unmount(queryKey: string): void {
-    const count = this.mountedKeys.get(queryKey);
-    if (count === 1) {
-      this.mountedKeys.delete(queryKey);
-    } else {
-      this.mountedKeys.set(queryKey, (count ?? 0) - 1);
-    }
-  }
-
-  /**
-   * Discard the oldest entries if the size exceeds the limit. The last
-   * remaining record cannot be deleted no matter what the limit is.
-   */
-  public enforceSizeLimit(): void {
+  function enforceSizeLimit(): void {
     // Skip if there are no limits.
-    if (!this.maxSize && !this.maxBytes) {
+    if (!maxSize && !maxBytes) {
       return;
     }
 
-    const oldState = this.queryState.getSnapshot();
+    const oldState = queryState.getSnapshot();
     const oldSize = Object.keys(oldState).length;
 
     // Cannot do GC if size is 1 or less.
@@ -617,20 +371,20 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
     const oldByteSize = getByteSize(oldState);
 
-    let numToCut = this.maxSize ? oldSize - this.maxSize : 0;
-    let bytesToCut = this.maxBytes ? oldByteSize - this.maxBytes : 0;
+    let numToCut = maxSize ? oldSize - maxSize : 0;
+    let bytesToCut = maxBytes ? oldByteSize - maxBytes : 0;
 
     // Log to indicate why trimming was not needed.
     if (numToCut <= 0 && bytesToCut <= 0) {
-      this.log(
-        `No need to trim data for ${this.queryName}: size=${oldSize} (limit=${this.maxSize}), byteSize=${oldByteSize.toLocaleString()} (limit=${this.maxBytes.toLocaleString()})`,
+      log(
+        `No need to trim data for ${queryName}: size=${oldSize} (limit=${maxSize}), byteSize=${oldByteSize.toLocaleString()} (limit=${maxBytes.toLocaleString()})`,
       );
       return;
     }
 
     // Log to inform user that trimming is needed.
-    this.log(
-      `Need to trim ${this.queryName}: numToCut=${numToCut}, bytesToCut=${bytesToCut}`,
+    log(
+      `Need to trim ${queryName}: numToCut=${numToCut}, bytesToCut=${bytesToCut}`,
     );
 
     const newState = { ...oldState }; // shallow clone
@@ -638,13 +392,13 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
     const deleteKeyIfNotMounted = (key: string, expired: boolean) => {
       // Mounted keys cannot be cleaned up as they are visible in the UI.
-      if (this.mountedKeys.has(key)) {
-        this.log(`Cannot clean up ${key} as it is mounted`);
+      if (mountedKeys.has(key)) {
+        log(`Cannot clean up ${key} as it is mounted`);
         return;
       }
 
       const byteSize = getByteSize(key) + getByteSize(newState[key]);
-      this.log(
+      log(
         `Cleaning up unmounted${expired ? ", expired" : ""} ${key} (byteSize=${byteSize.toLocaleString()})`,
       );
 
@@ -665,7 +419,7 @@ export class SharedQuery<TArgs extends unknown[], TData> {
     // timestamp and we need to apply our own expiration here.
     for (const [key] of entriesByTimeAscending) {
       // Anything after this is not expired yet.
-      if (!this.isExpired(newState[key].lastUpdatedMs)) {
+      if (!isExpired(newState[key].lastUpdatedMs)) {
         break;
       }
 
@@ -691,54 +445,296 @@ export class SharedQuery<TArgs extends unknown[], TData> {
 
     // Log to indicate why trimming was not needed.
     if (!needUpdate) {
-      this.log(
-        `No trimmable entries found for ${this.queryName}: size=${oldSize} (limit=${this.maxSize}), byteSize=${oldByteSize.toLocaleString()} (limit=${this.maxBytes.toLocaleString()})`,
+      log(
+        `No trimmable entries found for ${queryName}: size=${oldSize} (limit=${maxSize}), byteSize=${oldByteSize.toLocaleString()} (limit=${maxBytes.toLocaleString()})`,
       );
       return;
     }
 
     // Update the state.
-    this.queryState.setValue(newState);
+    queryState.setValue(newState);
 
     // Log to inform user that the data was trimmed.
-    this.log(
-      `Trimmed data for ${this.queryName}: size=[${oldSize} -> ${Object.keys(newState).length}] (limit=${this.maxSize}), byteSize=[${oldByteSize.toLocaleString()} -> ${getByteSize(newState).toLocaleString()}] (limit=${this.maxBytes.toLocaleString()})`,
+    log(
+      `Trimmed data for ${queryName}: size=[${oldSize} -> ${Object.keys(newState).length}] (limit=${maxSize}), byteSize=[${oldByteSize.toLocaleString()} -> ${getByteSize(newState).toLocaleString()}] (limit=${maxBytes.toLocaleString()})`,
     );
   }
-}
 
-// Disallow duplicate query names.
-const seenQueryNames = new Set<string>();
+  function setData(
+    queryKey: string,
+    data: TData,
+    dataUpdatedMs = Date.now(),
+  ): void {
+    const entry: QueryStateValue<TData> = {
+      lastUpdatedMs: Date.now(),
+      loading: false,
+      data,
+      dataUpdatedMs,
+    };
 
-/**
- * Create a reusable shared query object that can be used to auto de-duplicate
- * and cache all data fetches, with auto-expiration and staleness checks.
- *
- * Each `queryName` must be unique, and can only be declared once, most often
- * in the top level scope. The queryName is used for logging only.
- *
- * Example:
- * ```
- *   export const usersQuery = sharedQuery({
- *     queryName: "users",
- *     queryFn: listUsers,
- *     persistTo: "indexedDb",
- *     staleMs: MS_PER_DAY,
- *   });
- * ```
- */
-export function sharedQuery<TArgs extends unknown[], TData>(
-  // The name could have been auto-generated, but we let the user give us a
-  // human-readable name that can be identified quickly in the logs.
-  options: SharedQueryOptions<TArgs, TData>,
-): SharedQuery<TArgs, TData> {
-  if (seenQueryNames.has(options.queryName)) {
-    throw new Error(`Duplicate shared query "${options.queryName}"`);
+    queryState.setValue((prev) => ({ ...prev, [queryKey]: entry }));
+
+    enforceSizeLimit();
   }
-  seenQueryNames.add(options.queryName);
 
-  return new SharedQuery(options);
+  async function startFetching(
+    queryKey: string,
+    queryType: QueryType,
+    args: TArgs,
+  ) {
+    log(`Start fetching ${queryKey}, queryType=${queryType}`);
+
+    try {
+      const data = await (queryType === "refetch" && refetchFn
+        ? refetchFn(...args)
+        : queryFn(...args));
+
+      log(`Successfully fetched ${queryKey}`);
+      setData(queryKey, data, Date.now());
+      return data;
+    } catch (e) {
+      log(`Failed to fetch ${queryKey} for queryType=${queryType}: ${e}`);
+      throw e;
+    } finally {
+      inflightQueries.delete(queryKey);
+    }
+  }
+
+  function dedupedFetch(
+    queryKey: string,
+    queryType: QueryType,
+    ...args: TArgs
+  ): Promise<TData> {
+    const inflightQuery = inflightQueries.get(queryKey);
+
+    // De-duplicate in-flight requests. Note that queries and refetches are
+    // also deduped because they should technically be trying to fetch the same
+    // data.
+    if (inflightQuery) {
+      log(
+        `Deduplicating inflight fetch for ${queryKey}, queryType=${queryType}`,
+      );
+      return inflightQuery.promise;
+    }
+
+    // Fetch new data
+    const promise = startFetching(queryKey, queryType, args);
+    const abortController = new AbortController();
+
+    inflightQueries.set(queryKey, { promise, abortController });
+
+    return promise;
+  }
+
+  const obj = {
+    queryName,
+    queryFn,
+    refetchFn,
+    expiryMs,
+    staleMs,
+    refetchOnStale,
+    maxSize,
+    maxBytes,
+    keepLastNonEmptyData,
+    log,
+    queryState,
+
+    /** Returns a key to identify requests based on the given args. */
+    getQueryKey(args: TArgs): string {
+      return queryName + ":" + stringifyDeterministicForKeys(args);
+    },
+
+    /**
+     * Get the AbortController to abort the inflight query (if any).
+     *
+     * Note that once you get the controller, you can also get the signal easily
+     * using `controller.signal`. So if you need both the controller and the
+     * signal, just use this function.
+     */
+    getAbortController(args: TArgs): AbortController | null {
+      const queryKey = obj.getQueryKey(args);
+      return obj.getAbortControllerByKey(queryKey);
+    },
+
+    getAbortControllerByKey(queryKey: string): AbortController | null {
+      return inflightQueries.get(queryKey)?.abortController ?? null;
+    },
+
+    /**
+     * Get the AbortSignal to check for query abortions.
+     *
+     * Example:
+     * ```
+     *   const getUserQuery = sharedQuery({
+     *     queryName: "getUser",
+     *     queryFn: (userId: string) => {
+     *       // Get the signal for this current execution.
+     *       const signal = getUserQuery.getAbortSignal([userId]);
+     *
+     *       // Pass the signal to fetch so that it can be aborted.
+     *       const response = await fetch(`/users/${userId}`, { signal });
+     *
+     *       // Check for errors.
+     *       if (!response.ok) {
+     *         throw new Error(response.statusText);
+     *       }
+     *
+     *       // Return the data.
+     *       return await response.json();
+     *     },
+     *   });
+     * ```
+     */
+    getAbortSignal(args: TArgs): AbortSignal | null {
+      const queryKey = obj.getQueryKey(args);
+      return obj.getAbortSignalByKey(queryKey);
+    },
+
+    getAbortSignalByKey(queryKey: string): AbortSignal | null {
+      return obj.getAbortControllerByKey(queryKey)?.signal ?? null;
+    },
+
+    /** For cached data, we need to return the correct timestamps as well. */
+    async getCachedOrFetch(...args: TArgs): Promise<QueryStateValue<TData>> {
+      // Important: wait for data to be loaded from cache first before trying to
+      // fetch from server. This fixes a bad bug where the data is big, and the
+      // code here starts a server fetch before the cache data loaded.
+      const startMs = Date.now();
+      await queryState.readyPromise;
+      const waitedMs = Date.now() - startMs;
+
+      const queryKey = obj.getQueryKey(args);
+      const cached = queryState.getSnapshot()?.[queryKey];
+
+      if (waitedMs) {
+        log(`${queryKey}: Waited for ${waitedMs}ms before data is ready`);
+      }
+
+      if (cached?.data && !isExpired(cached.dataUpdatedMs ?? 0)) {
+        // Return cached value if not stale.
+        if (!isStale(cached.dataUpdatedMs ?? 0)) {
+          log(`Return fresh data ${queryKey} from cache without fetching`);
+          return cached;
+        }
+
+        // If stale, optionally update the data in the background.
+        if (refetchOnStale) {
+          log(`refetchOnStale for ${queryKey}`);
+          void dedupedFetch(queryKey, "query", ...args);
+        }
+
+        // Still return stale data immediately.
+        log(`Returning stale data for ${queryKey}`);
+        return cached;
+      }
+
+      const data = await dedupedFetch(queryKey, "query", ...args);
+      const now = Date.now();
+
+      return {
+        // Don't keep old error.
+        lastUpdatedMs: now,
+        loading: false,
+        data,
+        dataUpdatedMs: now,
+      };
+    },
+
+    /** Get the entire stored entry for a query key. */
+    getQueryValue(queryKey: string): QueryStateValue<TData> | undefined {
+      return queryState.getSnapshot()?.[queryKey];
+    },
+
+    /** Get the current stored data for a query key. */
+    getData(queryKey: string): TData | undefined {
+      const stateValue: QueryStateValue<TData> | undefined =
+        queryState.getSnapshot()?.[queryKey];
+
+      // Check for expiration.
+      if (stateValue?.lastUpdatedMs) {
+        if (isExpired(stateValue.lastUpdatedMs)) {
+          obj.deleteData(queryKey);
+          return undefined;
+        }
+      }
+
+      return stateValue?.data;
+    },
+
+    /** Set the data directly if the user obtained it from somewhere else. */
+    setData,
+
+    /**
+     * Do a new fetch even when the data is already cached, but don't fetch if
+     * another fetch is already inflight.
+     */
+    async updateFromSource(...args: TArgs): Promise<TData> {
+      const key = obj.getQueryKey(args);
+      return await dedupedFetch(key, "query", ...args);
+    },
+
+    /**
+     * Perform an explicit refetch. If `options.refetchFn` was not specified,
+     * then this would be identical to calling `obj.updateFromSource()`.
+     */
+    async refetch(...args: TArgs): Promise<TData> {
+      const key = obj.getQueryKey(args);
+      return await dedupedFetch(key, "refetch", ...args);
+    },
+
+    /** Delete the cached data for one set of arguments. */
+    deleteData(queryKey: string): void {
+      const record = queryState.getSnapshot();
+      const clone = { ...record };
+      delete clone[queryKey];
+      queryState.setValue(clone);
+
+      const inflight = inflightQueries.get(queryKey);
+      if (inflight) {
+        inflightQueries.delete(queryKey);
+        inflight.abortController.abort("Deleted");
+      }
+    },
+
+    /** Delete all currently cached data & all inflight promises. */
+    clear(): void {
+      queryState.delete();
+
+      for (const { abortController } of Array.from(inflightQueries.values())) {
+        abortController.abort("Cleared");
+      }
+
+      inflightQueries.clear();
+    },
+
+    /** Keep track of mounted keys. */
+    mount(queryKey: string): void {
+      mountedKeys.set(queryKey, (mountedKeys.get(queryKey) ?? 0) + 1);
+    },
+
+    /** Clean up mounted keys. */
+    unmount(queryKey: string): void {
+      const count = mountedKeys.get(queryKey);
+      if (count === 1) {
+        mountedKeys.delete(queryKey);
+      } else {
+        mountedKeys.set(queryKey, (count ?? 0) - 1);
+      }
+    },
+
+    /**
+     * Discard the oldest entries if the size exceeds the limit. The last
+     * remaining record cannot be deleted no matter what the limit is.
+     */
+    enforceSizeLimit,
+  } as const;
+
+  return obj;
 }
+
+export type SharedQuery<TArgs extends unknown[], TData> = ReturnType<
+  typeof sharedQuery<TArgs, TData>
+>;
 
 // Using any so that we don't need to typecast later.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -879,39 +875,20 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
       // This works only if the user-given queryFn supports abort. If not,
       // this function doesn't do anything, since we don't have any means to
       // abort the running queryFn.
-      abortCurrentQuery: (reason?: unknown) => {
+      abortCurrentQuery: (reason?: unknown): boolean => {
         const controller = query.getAbortControllerByKey(queryKey);
         controller?.abort(reason);
         return Boolean(controller);
       },
-      refetch: () => {
-        void execute(true);
+      refetch: (): Promise<void> => {
+        return execute(true);
       },
-      setData: (data: TData, dataUpdatedMs?: number) => {
-        const now = Date.now();
-        setQueryStateValue((prev) => ({
-          ...prev,
-          data,
-          dataUpdatedMs: dataUpdatedMs ?? now,
-          lastUpdatedMs: now,
-          loading: false,
-        }));
+      setData: (data: TData, dataUpdatedMs?: number): void => {
+        query.setData(queryKey, data, dataUpdatedMs);
       },
-      deleteData: () => {
-        setQueryState((prev) => {
-          const clone = { ...prev };
-          delete clone[queryKey];
-          return clone;
-        });
+      deleteData: (): void => {
+        query.deleteData(queryKey);
       },
     } satisfies UseQueryResult<TData>;
-  }, [
-    execute,
-    lastNonEmptyData,
-    query,
-    queryKey,
-    queryStateValue,
-    setQueryState,
-    setQueryStateValue,
-  ]);
+  }, [execute, lastNonEmptyData, query, queryKey, queryStateValue]);
 }
