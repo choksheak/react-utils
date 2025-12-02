@@ -163,9 +163,11 @@ export function kvStoreAdapter<T>({
       const fullKey = keyPrefix + key;
       const value = await kvStore.get<T>(fullKey);
 
-      if (isValid && !isValid(value)) {
+      // If there is no value, don't try to check for validatity.
+      if (value !== undefined && isValid && !isValid(value)) {
         console.warn(
-          `indexedDb adapter: Auto-discard invalid value for ${key}: ${JSON.stringify(value)}`,
+          `indexedDb adapter: Auto-discard invalid value for ${key}:`,
+          value,
         );
         await kvStore.delete(fullKey);
         return undefined;

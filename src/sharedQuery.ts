@@ -317,14 +317,58 @@ export function sharedQuery<TArgs extends unknown[], TData>(
 
   // Apply shortcut when using `persistTo`.
   // Specifying the `store` will take precedence over `persistTo`.
-  if (!options.store) {
+  const store = options.store;
+
+  if (store) {
+    // Wrap the isValid to account for the query state wrapper.
+    if ("persistTo" in store && store.isValid) {
+      const isValid = store.isValid;
+
+      options = {
+        ...options,
+        store: {
+          ...store,
+          isValid: (u) => {
+            // Supposed type of u: SharedQueryState<TData>
+            if (!u || typeof u !== "object") {
+              return false;
+            }
+
+            // Since each stored key could contain multiple values, and isValid
+            // checks for each value, we need to check every value to make sure
+            // they are valid.
+            // Supposed type of v: QueryStateValue<TData>
+            for (const v of Object.values(u)) {
+              if (
+                !v ||
+                typeof v !== "object" ||
+                !("data" in v) ||
+                !("dataUpdatedMs" in v) ||
+                !("lastUpdatedMs" in v) ||
+                typeof v.dataUpdatedMs !== "number" ||
+                typeof v.lastUpdatedMs !== "number" ||
+                !isValid(v.data)
+              ) {
+                return false;
+              }
+            }
+
+            return true;
+          },
+        },
+      };
+    }
+  } else {
     const persistTo = options.persistTo ?? SharedQueryConfig.persistTo;
 
     if (persistTo) {
-      options.store = {
-        persistTo,
-        key: queryName,
-        expiryMs,
+      options = {
+        ...options,
+        store: {
+          persistTo,
+          key: queryName,
+          expiryMs,
+        },
       };
     }
   }
