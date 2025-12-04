@@ -130,10 +130,11 @@ export type QueryStateValue<TData> = Readonly<{
 export type UseQueryResult<TData> = QueryStateValue<TData> &
   Readonly<{
     /**
-     * Return the last non-empty data if you want to display the last loaded data
-     * while waiting for the new data to load.
+     * Usually same as `data`, but if you specify `keepLastNonEmptyData: true`,
+     * then this will contain the latest data (undefined when args just changed)
+     * and data will contain the last non empty data.
      */
-    lastNonEmptyData: TData | undefined;
+    latestData: TData | undefined;
 
     /**
      * Cancels the inflight query (if any). Returns true if canceled.
@@ -915,7 +916,14 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
   return useMemo(() => {
     return {
       ...queryStateValue,
-      lastNonEmptyData,
+
+      // Fill with lastNonEmptyData when data is undefined.
+      data:
+        queryStateValue.data !== undefined
+          ? queryStateValue.data
+          : lastNonEmptyData,
+      latestData: queryStateValue.data,
+
       // This works only if the user-given queryFn supports abort. If not,
       // this function doesn't do anything, since we don't have any means to
       // abort the running queryFn.
