@@ -95,26 +95,36 @@ export function localStoreAdapter<T>({
   expiryMs,
   isValid,
 }: StoreConstructorArgs) {
-  const adapter = createLocalStore(key, { defaultExpiryMs: expiryMs });
+  // Put everything in the same store so that we can GC properly.
+  const STORE_NAME = "react-utils";
+
+  const adapter = createLocalStore(STORE_NAME, {
+    defaultExpiryMs: expiryMs,
+  });
+
+  // Use the key prefix as a unique namespace for this store.
+  const keyPrefix = key + ":";
 
   return {
     set: (key: string, value: T): void => {
       if (IS_NOT_BROWSER) return; // handle SSR
 
       // Also apply the custom expiryMs on every item in this store.
-      adapter.set(key, value);
+      adapter.set(keyPrefix + key, value);
     },
 
     get: (key: string): T | undefined => {
       if (IS_NOT_BROWSER) return undefined; // handle SSR
 
-      const value = adapter.get<T>(key);
+      const fullKey = keyPrefix + key;
+      const value = adapter.get<T>(fullKey);
 
-      if (isValid && !isValid(value)) {
+      // If there is no value, don't try to check for validatity.
+      if (value !== undefined && isValid && !isValid(value)) {
         console.warn(
-          `localStorage adapter: Auto-discard invalid value for ${key}: ${JSON.stringify(value)}`,
+          `localStorage adapter: Auto-discard invalid value for ${fullKey}: ${JSON.stringify(value)}`,
         );
-        adapter.delete(key);
+        adapter.delete(fullKey);
         return undefined;
       }
 
@@ -124,9 +134,10 @@ export function localStoreAdapter<T>({
     delete: (key: string): void => {
       if (IS_NOT_BROWSER) return; // handle SSR
 
-      adapter.delete(key);
+      adapter.delete(keyPrefix + key);
     },
 
+    /** Note that this will clear all keys in all shared states. */
     clear: (): void => {
       if (IS_NOT_BROWSER) return; // handle SSR
 
