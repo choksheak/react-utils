@@ -166,22 +166,22 @@
         <p style="display: flex; justify-content: center; gap: 6px; margin: 60px 0 120px;">
             <a href="#WhyUseThis"
                 onClick="document.getElementById('WhyUseThis').scrollIntoView({behavior: 'smooth', block: 'start'}); return false">Why
-                Use This?</a>
+                Use This? ↓</a>
             ·
             <a href="#GetStarted"
                 onClick="document.getElementById('GetStarted').scrollIntoView({behavior: 'smooth', block: 'start'}); return false">Get
-                Started</a>
+                Started ↓</a>
             ·
             <a href="#Examples"
-                onClick="document.getElementById('Examples').scrollIntoView({behavior: 'smooth', block: 'start'}); return false">Examples</a>
+                onClick="document.getElementById('Examples').scrollIntoView({behavior: 'smooth', block: 'start'}); return false">Examples ↓</a>
             ·
-            <a href="reference/index.html" target="_blank">Docs</a>
+            <a href="reference/index.html" target="_blank">Docs ↗</a>
             ·
-            <a href="https://github.com/choksheak/react-utils" target="_blank">Source code</a>
+            <a href="https://github.com/choksheak/react-utils" target="_blank">Source code ↗</a>
         </p>
 
         <a id="WhyUseThis" name="WhyUseThis"></a>
-        <h3>Why Use This?</h3>
+        <h3 tabindex="0" onClick="window.scrollTo({top: 0, behavior: 'smooth'}); return false" style="cursor: pointer;">Why Use This? <span style="opacity: .3;">↑</span></h3>
 
         <p>
             This package is built after similar open source packages like
@@ -221,7 +221,7 @@
         </p>
 
         <a id="GetStarted" name="GetStarted"></a>
-        <h3>Get Started</h3>
+        <h3 tabindex="0" onClick="window.scrollTo({top: 0, behavior: 'smooth'}); return false" style="cursor: pointer;">Get Started <span style="opacity: .3;">↑</span></h3>
 
         <p>
             Install the package using the standard package manager command:
@@ -230,7 +230,7 @@
         <pre><code class="language-plaintext">npm i @choksheak/react-utils</code></pre>
 
         <a id="Examples" name="Examples"></a>
-        <h3>Examples</h3>
+        <h3 tabindex="0" onClick="window.scrollTo({top: 0, behavior: 'smooth'}); return false" style="cursor: pointer;">Examples <span style="opacity: .3;">↑</span></h3>
 
         <!-- fetcher -->
 
@@ -373,7 +373,7 @@ export const FullNameInput: React.FC = () => {
     );
 };</code></pre>
 
-        <h3>Reference</h3>
+        <h3 tabindex="0" onClick="window.scrollTo({top: 0, behavior: 'smooth'}); return false" style="cursor: pointer;">Reference <span style="opacity: .3;">↑</span></h3>
 
         For more details about each module, please refer to the
         <a href="reference/index.html" target="_blank">Reference Documentation</a>
