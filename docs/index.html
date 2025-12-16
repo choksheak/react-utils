@@ -3,6 +3,7 @@
 
 <head>
     <title>Chok’s React Utilities</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <style>
         @media (prefers-color-scheme: light) {
             body {
@@ -57,6 +58,47 @@
             font-size: 110%;
         }
 
+        .topBar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 64px;
+            max-height: 64px;
+            padding: 0 32px;
+            border-bottom: 1px solid rgb(229, 231, 235);
+            margin-bottom: 6px;
+        }
+
+        @media (max-width: 600px) {
+            .topBar {
+                padding: 0 12px;
+                font-size: 90%;
+            }
+        }
+
+        .topLinks {
+            display: flex;
+            gap: 12px;
+        }
+
+        @media (max-width: 600px) {
+            .topLinks {
+                gap: 4px;
+            }
+        }
+
+        .githubIcon {
+            width: 20px;
+            height: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .githubIcon {
+                width: 18px;
+                height: 18px;
+            }
+        }
+
         iframe {
             height: 100%;
             width: 100%;
@@ -66,12 +108,11 @@
 </head>
 
 <body>
-    <div
-        style="display: flex; align-items: center; justify-content: space-between; min-height: 64px; max-height: 64px; padding: 0 32px; border-bottom: 1px solid rgb(229, 231, 235); margin-bottom: 6px;">
+    <div class="topBar">
         <div>
             <a class="main" href="home.html" target="iframe1">Home Page</a>
         </div>
-        <div style="display: flex; gap: 12px;">
+        <div class="topLinks">
             <a href="home.html#GetStarted" target="iframe1">Get Started</a>
             ·
             <a href="home.html#Examples" target="iframe1">Examples</a>
@@ -80,8 +121,7 @@
             ·
             <!-- Github cannot render inside iframes -->
             <a href="https://github.com/choksheak/react-utils" target="_blank" style="display:flex; gap:8px;">
-                Source Code
-                <img src="images/githubIcon.svg" style="width:20px;height:20px;" />
+                <img src="images/githubIcon.svg" class="githubIcon" />
             </a>
         </div>
     </div>
