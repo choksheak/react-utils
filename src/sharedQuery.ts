@@ -94,6 +94,7 @@ import {
   useState,
 } from "react";
 
+import { fetcher } from "./fetcher";
 import { sharedState, SharedStateOptions, useSharedState } from "./sharedState";
 import { PersistTo } from "./storage";
 import { stringifyDeterministicForKeys } from "./stringify";
@@ -161,8 +162,7 @@ export type UseQueryResult<TData> = QueryStateValue<TData> &
  */
 export type SharedQueryState<TData> = Record<string, QueryStateValue<TData>>;
 
-/** Options to configure a shared query. */
-export type SharedQueryOptions<TArgs extends unknown[], TData> = {
+export type QueryTargetWithFn<TArgs extends unknown[], TData> = {
   /**
    * The name could have been auto-generated, but we let the user give us a
    * human-readable name that can be identified quickly in the logs.
@@ -171,11 +171,50 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = {
    */
   queryName: string;
 
-  /**
-   * Function to fetch data.
-   */
+  /** Function to fetch data. */
   queryFn: QueryFn<TArgs, TData>;
+};
 
+export type QueryTargetWithUrl = {
+  /**
+   * The queryName can optionally be specified, else we will fallback to use
+   * the url as the queryName.
+   */
+  queryName?: string;
+
+  /**
+   * URL to fetch data using HTTP GET. Note that using this field will cause
+   * both TArgs and TData to be undefined (unknown). Therefore you can make up
+   * for this by specifying types with useSharedQuery, like this:
+   * ```
+   * const usersQuery = useSharedQuery<[{ userId?: string[] }], User[]>({
+   *   url: "/api/list-users",
+   * });
+   * ```
+   *
+   * If `userId` were specified as ["u1", "u2"], the query url would be
+   * "/api/list-users?userId=u1&userId=u2".
+   *
+   * You can also pass the params as a string like "userId=u1&userId=u2".
+   * ```
+   * const usersQuery = useSharedQuery<[string], User[]>({
+   *   url: "/api/list-users",
+   * });
+   * ```
+   */
+  url: string;
+};
+
+/** Specifies how to fetch the data. */
+export type QueryTarget<TArgs extends unknown[], TData> =
+  | QueryTargetWithFn<TArgs, TData>
+  | QueryTargetWithUrl;
+
+/** Options to configure a shared query. */
+export type SharedQueryOptions<TArgs extends unknown[], TData> = QueryTarget<
+  TArgs,
+  TData
+> & {
   /**
    * Function to re-fetch data. Usually this would just be the `queryFn`, but
    * if you need a different behavior for refetching, then specify this.
@@ -289,10 +328,18 @@ export function sharedQuery<TArgs extends unknown[], TData>(
   // human-readable name that can be identified quickly in the logs.
   options: SharedQueryOptions<TArgs, TData>,
 ) {
-  if (seenQueryNames.has(options.queryName)) {
-    throw new Error(`Duplicate shared query name "${options.queryName}"`);
+  // If queryName is not specified, fallback to use url as the queryName.
+  const url = (options as QueryTargetWithUrl).url || "";
+  const queryName = options.queryName || url;
+
+  if (!queryName) {
+    throw new Error(`Either queryName or url must be specified.`);
   }
-  seenQueryNames.add(options.queryName);
+
+  if (seenQueryNames.has(queryName)) {
+    throw new Error(`Duplicate shared query name "${queryName}"`);
+  }
+  seenQueryNames.add(queryName);
 
   const inflightQueries = new Map<
     string,
@@ -306,8 +353,63 @@ export function sharedQuery<TArgs extends unknown[], TData>(
    */
   const mountedKeys = new Map<string, number>();
 
-  const queryName = options.queryName;
-  const queryFn = options.queryFn;
+  let queryFn: QueryFn<TArgs, TData>;
+
+  if ((options as QueryTargetWithFn<TArgs, TData>).queryFn) {
+    queryFn = (options as QueryTargetWithFn<TArgs, TData>).queryFn;
+  } else if (url) {
+    // Auto-generate the queryFn as a HTTP GET request using the url.
+    queryFn = (...args: TArgs): Promise<TData> => {
+      // If args are given, treat the first argument as a search param.
+      let params = "";
+      const firstArg = args?.[0];
+
+      if (firstArg) {
+        if (typeof firstArg === "string") {
+          params = firstArg;
+        } else if (typeof firstArg === "object") {
+          const entries: [string, string][] = [];
+
+          for (const [k, v] of Object.entries(firstArg)) {
+            if (v === undefined) continue;
+
+            // Allow the same param to be specified multiple times.
+            if (Array.isArray(v)) {
+              for (const item of v) {
+                if (item === undefined) continue;
+
+                // The field values can only be primitives, not objects.
+                entries.push([k, String(item)]);
+              }
+            } else {
+              // The field values can only be primitives, not objects.
+              entries.push([k, String(v)]);
+            }
+          }
+
+          params = new URLSearchParams(entries).toString();
+        }
+
+        if (params) {
+          if (url.includes("?")) {
+            // Append more search params to existing ones.
+            params = "&" + params;
+          } else {
+            // Set the full search params string.
+            params = "?" + params;
+          }
+        }
+      }
+
+      return fetcher
+        .url(url + params)
+        .get()
+        .json();
+    };
+  } else {
+    throw new Error(`Either queryFn or url must be specified`);
+  }
+
   const refetchFn = options.refetchFn;
 
   const staleMs = options?.staleMs ?? SharedQueryConfig.staleMs;
