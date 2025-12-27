@@ -309,10 +309,21 @@ import { MS_PER_HOUR } from "@choksheak/ts-utils/timeConstants";
 
 // Create a shared query object that is reusable in other parts of the code.
 export const listUsersQuery = sharedQuery({
-    queryName: "listUsers",
-    queryFn: () => fetcher.url("/api/list-users").get(),
+    url: "/api/list-users",
+});
+
+// Similar to listUsersQuery, but adding persistence.
+export const listUsersQuery2 = sharedQuery({
+    queryName: "listUsers2", // specify to avoid conflict with listUsersQuery
+    url: "/api/list-users",
     persistTo: "indexedDb",
     staleMs: MS_PER_HOUR,
+});
+
+// Similar to listUsersQuery, but using a custom queryFn instead of url.
+export const listUsersQuery3 = sharedQuery({
+    queryName: "listUsers3", // required when using queryFn
+    queryFn: () => fetcher.url("/api/list-users").get(),
 });
 
 export const ListUsersComponent1: React.FC = () => {
