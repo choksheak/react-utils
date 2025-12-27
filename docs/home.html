@@ -3,6 +3,7 @@
 
 <head>
     <title>Chok’s React Utilities</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/default.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/nnfx-light.min.css"
         media="(prefers-color-scheme: light)">
@@ -46,11 +47,18 @@
             padding: 40px 60px;
         }
 
+        @media (max-width: 600px) {
+            .content {
+                padding: 12px;
+            }
+        }
+
         h1 {
             font-size: 36px;
             font-weight: 700;
             letter-spacing: 1.5px;
             margin: 0;
+            text-align: center;
         }
 
         h2 {
@@ -93,6 +101,19 @@
             font-size: 18px;
             letter-spacing: 0.5px;
             font-weight: 350;
+        }
+
+        .quickLinks {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin: 60px 0 120px;
+        }
+
+        @media (max-width: 600px) {
+            .quickLinks {
+                display: none;
+            }
         }
 
         pre {
@@ -163,7 +184,7 @@
             </span>
         </p>
 
-        <p style="display: flex; justify-content: center; gap: 6px; margin: 60px 0 120px;">
+        <p class="quickLinks">
             <a href="#WhyUseThis"
                 onClick="document.getElementById('WhyUseThis').scrollIntoView({behavior: 'smooth', block: 'start'}); return false">Why
                 Use This? ↓</a>
@@ -181,7 +202,7 @@
         </p>
 
         <a id="WhyUseThis" name="WhyUseThis"></a>
-        <h3 tabindex="0" onClick="window.scrollTo({top: 0, behavior: 'smooth'}); return false" style="cursor: pointer;">Why Use This? <span style="opacity: .3;">↑</span></h3>
+        <h3>Why Use This? <span tabindex="0" onClick="window.scrollTo({top: 0, behavior: 'smooth'}); return false" style="cursor: pointer; opacity: .3;">↑</span></h3>
 
         <p>
             This package is built after similar open source packages like
@@ -230,7 +251,7 @@
         <pre><code class="language-plaintext">npm i @choksheak/react-utils</code></pre>
 
         <a id="Examples" name="Examples"></a>
-        <h3 tabindex="0" onClick="window.scrollTo({top: 0, behavior: 'smooth'}); return false" style="cursor: pointer;">Examples <span style="opacity: .3;">↑</span></h3>
+        <h3>Examples <span tabindex="0" onClick="window.scrollTo({top: 0, behavior: 'smooth'}); return false" style="cursor: pointer; opacity: .3;">↑</span></h3>
 
         <!-- fetcher -->
 
@@ -373,7 +394,7 @@ export const FullNameInput: React.FC = () => {
     );
 };</code></pre>
 
-        <h3 tabindex="0" onClick="window.scrollTo({top: 0, behavior: 'smooth'}); return false" style="cursor: pointer;">Reference <span style="opacity: .3;">↑</span></h3>
+        <h3>Reference <span tabindex="0" onClick="window.scrollTo({top: 0, behavior: 'smooth'}); return false" style="cursor: pointer; opacity: .3;">↑</span></h3>
 
         For more details about each module, please refer to the
         <a href="reference/index.html" target="_blank">Reference Documentation</a>
