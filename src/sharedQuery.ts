@@ -83,7 +83,6 @@
  * ```
  */
 
-import { MS_PER_DAY } from "@choksheak/ts-utils/timeConstants";
 import getByteSize from "object-sizeof";
 import {
   SetStateAction,
@@ -274,7 +273,7 @@ export const SharedQueryConfig = {
   staleMs: 0,
 
   /** Keep in cache for a long time. */
-  expiryMs: 30 * MS_PER_DAY,
+  expiryMs: 30 * 86_400_000 /* MS_PER_DAY */,
 
   /** Always refetch automatically if the data is stale. */
   refetchOnStale: true,
