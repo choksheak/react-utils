@@ -709,7 +709,7 @@ export function sharedQuery<TArgs extends unknown[], TData>(
     /**
      * Get the AbortSignal to check for query abortions.
      *
-     * Example:
+     * Example using fetch:
      * ```
      *   const getUserQuery = sharedQuery({
      *     queryName: "getUser",
@@ -727,6 +727,20 @@ export function sharedQuery<TArgs extends unknown[], TData>(
      *
      *       // Return the data.
      *       return await response.json();
+     *     },
+     *   });
+     * ```
+     *
+     * Example using `fetcher.ts`:
+     * ```
+     *   const getUserQuery = sharedQuery({
+     *     queryName: "getUser",
+     *     queryFn: (userId: string) => {
+     *       // Get the signal for this current execution.
+     *       const signal = getUserQuery.getAbortSignal([userId]);
+     *
+     *       // Pass the signal to fetch so that it can be aborted.
+     *       return fetcher.url(`/users/${userId}`).options({ signal }).get().json();
      *     },
      *   });
      * ```
