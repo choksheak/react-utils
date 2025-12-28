@@ -284,12 +284,12 @@ console.log(`Fetched data:`, data);</code></pre>
 import { NoSSR } from "@choksheak/react-utils/NoSSR";
 
 export const ClientSideOnlyComponent: React.FC = () => {
-    // Ensure that the component only gets rendered on the client side.
-    return (
-        &lt;NoSSR&gt;
-            &lt;ComponentThatOnlyRendersOnTheClientSide /&gt;
-        &lt;/NoSSR&gt;
-    );
+  // Ensure that the component only gets rendered on the client side.
+  return (
+    &lt;NoSSR&gt;
+      &lt;ComponentThatOnlyRendersOnTheClientSide /&gt;
+    &lt;/NoSSR&gt;
+  );
 };</code></pre>
 
         <!-- sharedQuery -->
@@ -309,65 +309,65 @@ import { MS_PER_HOUR } from "@choksheak/ts-utils/timeConstants";
 
 // Create a shared query object that is reusable in other parts of the code.
 export const listUsersQuery = sharedQuery({
-    url: "/api/list-users",
+  url: "/api/list-users",
 });
 
 // Similar to listUsersQuery, but adding persistence.
 export const listUsersQuery2 = sharedQuery({
-    queryName: "listUsers2", // specify to avoid conflict with listUsersQuery
-    url: "/api/list-users",
-    persistTo: "indexedDb",
-    staleMs: MS_PER_HOUR,
+  // Specify `queryName` to avoid conflict with listUsersQuery.
+  queryName: "listUsers2", 
+  url: "/api/list-users",
+  persistTo: "indexedDb",
+  staleMs: MS_PER_HOUR,
 });
 
 // Similar to listUsersQuery, but using a custom queryFn instead of url.
 export const listUsersQuery3 = sharedQuery({
-    queryName: "listUsers3", // required when using queryFn
-    queryFn: () => fetcher.url("/api/list-users").get(),
+  // `queryName` is required when using queryFn.
+  queryName: "listUsers3",
+  queryFn: (): Promise&lt;User[]&gt; => fetcher.url("/api/list-users").get(),
 });
 
 export const ListUsersComponent1: React.FC = () => {
-    // Use the shared query to get data.
-    // Note that while you can also use the `const { data ... } =` syntax, it
-    // does not scale well when you need multiple shared queries in the same
-    // component, so we recommend using the `const listUsers =` syntax instead.
-    const listUsers = useSharedQuery(listUsersQuery);
+  // Use the shared query to get data.
+  // Note that while you can also use the `const { data ... } =` syntax, it
+  // does not scale well when you need multiple shared queries in the same
+  // component, so we recommend using the `const listUsers =` syntax instead.
+  const listUsers = useSharedQuery(listUsersQuery);
 
-    return (
-        &lt;&gt;
-            &lt;h1&gt;Users&lt;/h1&gt;
+  return (
+    &lt;&gt;
+      &lt;h1&gt;Users&lt;/h1&gt;
 
-            {/* Inform the user that the data is loading. */}
-            {listUsers.loading && "Loading..."}
+      {listUsers.loading && "Loading..."}
 
-            {/* If the data is available, don't show the error. */}
-            {!listUsers.data && listUsers.error ? String(listUsers.error) : null}
+      {!listUsers.data && listUsers.error ? String(listUsers.error) : null}
 
-            {/* Assume that `listUsers.data` is an array of users. */}
-            {listUsers.data?.map((user, index) => {
-                return &lt;User key={index} user={user} /&gt;
-            }) ?? "-"}
-        &lt;/&gt;
-    );
+      {listUsers.data?.map((user, index) => {
+        return &lt;User key={index} user={user} /&gt;
+      }) ?? "-"}
+    &lt;/&gt;
+  );
 };
 
 export const ListUsersComponent2: React.FC = () => {
-    // Example using the unpack assignment syntax.
-    const { loading, data, error } = useSharedQuery(listUsersQuery);
+  // Example using the unpack assignment syntax.
+  // Suitable when you only have one shared query in a component.
+  const { loading, data, error } = useSharedQuery(listUsersQuery);
 
-    return (
-        &lt;&gt;
-            &lt;h1&gt;Users&lt;/h1&gt;
+  return (
+    &lt;&gt;
+      &lt;h1&gt;Users&lt;/h1&gt;
 
-            {loading && "Loading..."}
+      {loading && "Loading..."}
 
-            {!data && error ? String(error) : null}
+      {!data && error ? String(error) : null}
 
-            {data?.map((user, index) => {
-                return &lt;User key={index} user={user} /&gt;
-            }) ?? "-"}
-        &lt;/&gt;
-    );
+      {data?.map((user, index) => {
+        return &lt;User key={index} user={user} /&gt;
+      }) ?? "-"}
+    &lt;/&gt;
+  );
 };</code></pre>
 
         <!-- sharedState -->
@@ -384,25 +384,24 @@ export const ListUsersComponent2: React.FC = () => {
 import { sharedState } from "@choksheak/react-utils/sharedState";
 
 // Create a shared state that can be reused anywhere in the code.
-export const fullNameState = sharedState(
-    "", { store: { persistTo: "indexedDb", key: "fullName" }}
+export const searchTermState = sharedState(
+  "", { store: { persistTo: "indexedDb", key: "searchTerm" }}
 );
 
-export const FullNameInput: React.FC = () => {
-    // Think of `useSharedState` as like `useState`.
-    const [fullName, setFullName] = useSharedState(fullNameState);
+export const SearchTermInput: React.FC = () => {
+  // Think of `useSharedState` as like `useState`.
+  const [searchTerm, setSearchTerm] = useSharedState(searchTermState);
 
-    return (
-        &lt;&gt;
-            Full name:
-            &amp;nbsp;
-            &lt;input
-                type="text"
-                value={fullName}
-                onChange={(e) =&gt; setFullName(e.target.value)}
-            /&gt;
-        &lt;/&gt;
-    );
+  return (
+    &lt;&gt;
+      Search term:{" "}
+      &lt;input
+        type="text"
+        value={searchTerm}
+        onChange={(e) =&gt; setSearchTerm(e.target.value)}
+      /&gt;
+    &lt;/&gt;
+  );
 };</code></pre>
 
         <h3>Reference <span tabindex="0" onClick="window.scrollTo({top: 0, behavior: 'smooth'}); return false" style="cursor: pointer; opacity: .3;">↑</span></h3>
