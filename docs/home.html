@@ -159,6 +159,25 @@
         </div>
 
         <p>
+            Fetch data in React using <b>Shared Queries</b>:
+        </p>
+
+        <pre><code>import { sharedQuery, useSharedQuery } from "@choksheak/react-utils/sharedQuery";
+
+export const userQuery = sharedQuery&lt;{ id: string }, User&gt;({
+  url: "/api/user",
+});
+
+export const UserGreeting: React.FC&lt;{ userId: string }&gt; = ({ userId }) => {
+  // The query url becomes `/api/user?id=${userId}`.
+  const { data, error, loading } = useSharedQuery(userQuery, { id: userId })
+ 
+  if (loading) return "Loading...";
+  if (error) return String(error);
+  return `Hello ${data?.name}`;
+};</code></pre>
+
+        <p>
             This package is a time-tested collection of React utilities written
             in TypeScript that I have personally needed in almost every project
             that I have worked in. Making this an open source, public npm
