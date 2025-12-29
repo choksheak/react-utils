@@ -92,6 +92,7 @@ import {
   useRef,
   useState,
 } from "react";
+import XXH from "xxhashjs";
 
 import { fetcher } from "./fetcher";
 import { sharedState, SharedStateOptions, useSharedState } from "./sharedState";
@@ -687,7 +688,14 @@ export function sharedQuery<TArgs extends unknown[], TData>(
 
     /** Returns a key to identify requests based on the given args. */
     getQueryKey(args: TArgs): string {
-      return queryName + ":" + stringifyDeterministicForKeys(args);
+      let s = stringifyDeterministicForKeys(args);
+
+      // Ensure the query key is not too long.
+      if (s.length > 30) {
+        s = XXH.h32(s, 0x99ee).toString(16).slice(2); // remove "0x"
+      }
+
+      return queryName + ":" + s;
     },
 
     /**
