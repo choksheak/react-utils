@@ -22,14 +22,10 @@
     "docs": "typedoc",
     "gen-types": "tsc --emitDeclarationOnly --declaration",
     "gen-exports": "tsx scripts/gen-exports.ts",
-    "bump": "tsx scripts/bump-version.ts",
-    "bump:patch": "tsx scripts/bump-version.ts --patch",
-    "bump:minor": "tsx scripts/bump-version.ts --minor",
-    "bump:major": "tsx scripts/bump-version.ts --major",
     "pkg": "scripts/package.sh",
     "pub": "npm publish dist/ --access=public",
-    "commit": "scripts/commit-release.sh",
-    "release": "npm run ci && npm run bump && npm i && npm run pkg && npm run pub && npm run commit",
+    "commit": "git add . && git commit -m 'Release '`bump-version get`",
+    "release": "npm run clean && bump-version && npm i && npm run ci && npm run pkg && npm run pub && npm run commit",
     "postinstall": "simple-git-hooks"
   },
   "simple-git-hooks": {
@@ -60,6 +56,7 @@
   "type": "commonjs",
   "homepage": "https://github.com/choksheak/react-utils#readme",
   "devDependencies": {
+    "@choksheak/bump-version": "^0.1.2",
     "@choksheak/ts-utils": "^0.3.5",
     "@eslint/compat": "^1.4.0",
     "@eslint/js": "^9.38.0",
