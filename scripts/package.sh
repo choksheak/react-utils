@@ -7,8 +7,8 @@ rm -rf dist
 mkdir dist
 
 echo Build
-npm run build
-npm run gen-types
+pnpm run build
+pnpm run gen-types
 
 echo Copy files
 cp -r package.json LICENSE README.md dist
@@ -17,4 +17,4 @@ echo Remove test files
 find dist/ -type f -name "*.test.*" -delete
 
 echo Gen exports
-npm run gen-exports
+pnpm run gen-exports

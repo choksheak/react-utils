@@ -2,6 +2,16 @@
   "name": "@choksheak/react-utils",
   "license": "The Unlicense",
   "version": "0.3.9",
+  "packageManager": "pnpm@9.15.9",
+  "pnpm": {
+    "packageExtensions": {
+      "@choksheak/ts-utils": {
+        "dependencies": {
+          "simple-git-hooks": "^2.13.1"
+        }
+      }
+    }
+  },
   "description": "Miscellaneous React+TypeScript utilities with support for full tree-shaking.",
   "private": false,
   "sideEffects": false,
@@ -12,24 +22,24 @@
     "lint": "eslint .",
     "fix": "eslint . --fix",
     "tsc": "tsc --noEmit --allowSyntheticDefaultImports",
-    "ft": "npm run fix && npm run tsc",
+    "ft": "pnpm run fix && pnpm run tsc",
     "build": "tsup src/*",
     "test": "vitest run",
     "test:watch": "vitest",
-    "ci": "npm run lint && npm run tsc && npm run build && npm run test",
+    "ci": "pnpm run lint && pnpm run tsc && pnpm run build && pnpm run test",
     "ls": "lint-staged",
     "clean": "rm -rf dist",
     "docs": "typedoc",
     "gen-types": "tsc --emitDeclarationOnly --declaration",
     "gen-exports": "tsx scripts/gen-exports.ts",
     "pkg": "scripts/package.sh",
-    "pub": "npm publish dist/ --access=public",
+    "pub": "pnpm --dir dist publish --access=public --no-git-checks",
     "commit": "git add . && git commit -m 'Release '`bump-version get`",
-    "release": "npm run clean && bump-version && npm i && npm run ci && npm run pkg && npm run pub && npm run commit",
+    "release": "pnpm run clean && bump-version && pnpm install && pnpm run ci && pnpm run pkg && pnpm run pub && pnpm run commit",
     "postinstall": "simple-git-hooks"
   },
   "simple-git-hooks": {
-    "pre-commit": "npx lint-staged"
+    "pre-commit": "pnpm exec lint-staged"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
@@ -38,7 +48,7 @@
     ],
     "*.{ts,tsx}": [
       "echo `tsc-files --noEmit` cannot read *.module.css files",
-      "npm run tsc"
+      "pnpm run tsc"
     ]
   },
   "repository": {
