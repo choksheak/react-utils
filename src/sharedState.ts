@@ -201,11 +201,21 @@ export function sharedState<T>(
   );
 
   // Always set the default value first to avoid returning undefineds if that
-  // is not part of T.
+  // is not part of T. Don't notify with the default value.
   pubSubStore.setNoNotify(pubSubKey, defaultValue);
 
   const lazyLoad = options?.lazyLoad;
   const lazy = lazyLoad !== undefined ? lazyLoad : SharedStateConfig.lazyLoad;
+
+  function completeInit(stored: T | undefined) {
+    const value = stored !== undefined ? stored : defaultValue;
+
+    pubSubStore.set(pubSubKey, value);
+
+    // @ts-expect-error ts(2540) - Assign to readonly property.
+    obj.initDone = true;
+    resolveReadyPromise();
+  }
 
   const obj = {
     /** Allow users to await for the completion of data init. */
@@ -233,16 +243,16 @@ export function sharedState<T>(
      * Warning: If you want to set the value properly, you should use
      * `setValue()` instead which also updates the in-memory copy.
      */
-    async setInStore(value: T): Promise<void> {
-      return await storageAdapter?.set(STORAGE_KEY, value);
+    setInStore(value: T): Promise<void> | void {
+      return storageAdapter?.set(STORAGE_KEY, value);
     },
 
     /**
      * Get a value directly from the store. Returns undefined if there is no
      * backing store.
      */
-    async getFromStore(): Promise<T | undefined> {
-      return await storageAdapter?.get(STORAGE_KEY);
+    getFromStore(): Promise<T | undefined> | T | undefined {
+      return storageAdapter?.get(STORAGE_KEY);
     },
 
     /**
@@ -270,30 +280,32 @@ export function sharedState<T>(
      * Remove the value of the shared state. Actually this just sets the value
      * back to the given default value.
      */
-    delete() {
+    delete(): Promise<void> | void {
       pubSubStore.set(pubSubKey, defaultValue);
-      void storageAdapter?.set(STORAGE_KEY, defaultValue);
+      return storageAdapter?.set(STORAGE_KEY, defaultValue);
     },
 
     /** Initial default handling. */
-    async initDefaultValueOnce() {
+    initDefaultValueOnce(): Promise<void> | void {
       if (obj.initDone || obj.initStarted) return;
       // @ts-expect-error ts(2540) - Assign to readonly property.
       obj.initStarted = true;
 
-      const stored = await obj.getFromStore();
-      const value = stored !== undefined ? stored : defaultValue;
+      const maybePromise = obj.getFromStore();
 
-      pubSubStore.set(pubSubKey, value);
-
-      // @ts-expect-error ts(2540) - Assign to readonly property.
-      obj.initDone = true;
-      resolveReadyPromise();
+      // Allow sync vs async code paths. This allows init to be fully completed
+      // from store before the sharedState() function returns.
+      if (maybePromise instanceof Promise) {
+        return maybePromise.then(completeInit);
+      } else {
+        const stored = maybePromise;
+        completeInit(stored);
+      }
     },
   } as const;
 
   if (!lazy) {
-    void obj.initDefaultValueOnce();
+    obj.initDefaultValueOnce();
   }
 
   return obj;
