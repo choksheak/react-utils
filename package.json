@@ -1,7 +1,7 @@
 {
   "name": "@choksheak/react-utils",
   "license": "The Unlicense",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "packageExtensions": {
@@ -33,9 +33,9 @@
     "gen-types": "tsc --emitDeclarationOnly --declaration",
     "gen-exports": "tsx scripts/gen-exports.ts",
     "pkg": "scripts/package.sh",
-    "pub": "pnpm --dir dist publish --access=public --no-git-checks",
+    "pub": "pnpm publish dist/ --access=public",
     "commit": "git add . && git commit -m 'Release '`bump-version get`",
-    "release": "pnpm run clean && bump-version && pnpm install && pnpm run ci && pnpm run pkg && pnpm run pub && pnpm run commit",
+    "release": "pnpm run clean && bump-version && pnpm install && pnpm run ci && pnpm run pkg && pnpm run commit && pnpm run pub",
     "postinstall": "simple-git-hooks"
   },
   "simple-git-hooks": {
