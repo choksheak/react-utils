@@ -35,8 +35,8 @@ async function generateExportsConfig() {
   try {
     const files = await fs.readdir(DIST_DIR);
 
-    // Identify unique module base names (e.g., 'fetcher' from 'fetcher.js' or
-    // 'fetcher.d.ts')
+    // Identify unique module base names (e.g., 'sharedState' from
+    // 'sharedState.js' or 'sharedState.d.ts').
     const moduleBaseNames = new Set<string>();
 
     for (const file of files) {
