@@ -101,8 +101,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.2",
     "use-deep-compare": "^1.3.0",
-    "vitest": "^4.0.3",
-    "wretch": "^3.0.2"
+    "vitest": "^4.0.3"
   },
   "peerDependencies": {
     "@choksheak/ts-utils": ">=0.3.8",
@@ -110,7 +109,6 @@
     "object-sizeof": ">=2.6.5",
     "react": ">=16",
     "use-deep-compare": ">=1.3.0",
-    "wretch": ">=3",
     "xxhashjs": ">=0.2.2"
   }
 }
