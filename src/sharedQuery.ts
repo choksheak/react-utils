@@ -83,6 +83,7 @@
  * ```
  */
 
+import { http, retries } from "@choksheak/ts-utils/http";
 import getByteSize from "object-sizeof";
 import {
   SetStateAction,
@@ -94,7 +95,6 @@ import {
 } from "react";
 import XXH from "xxhashjs";
 
-import { fetcher } from "./fetcher";
 import { sharedState, SharedStateOptions, useSharedState } from "./sharedState";
 import { PersistTo } from "./storage";
 import { stringifyDeterministicForKeys } from "./stringify";
@@ -358,8 +358,10 @@ export function sharedQuery<TArgs extends unknown[], TData>(
   if ((options as QueryTargetWithFn<TArgs, TData>).queryFn) {
     queryFn = (options as QueryTargetWithFn<TArgs, TData>).queryFn;
   } else if (url) {
+    const fetcher = http.use(retries());
+
     // Auto-generate the queryFn as a HTTP GET request using the url.
-    queryFn = (...args: TArgs): Promise<TData> => {
+    queryFn = async (...args: TArgs): Promise<TData> => {
       // If args are given, treat the first argument as a search param.
       let params = "";
       const firstArg = args?.[0];
@@ -401,10 +403,9 @@ export function sharedQuery<TArgs extends unknown[], TData>(
         }
       }
 
-      return fetcher
-        .url(url + params)
-        .get()
-        .json();
+      const response = await fetcher.get(url + params);
+
+      return await response.json();
     };
   } else {
     throw new Error(`Either queryFn or url must be specified`);
