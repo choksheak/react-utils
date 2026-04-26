@@ -740,7 +740,7 @@ export function sharedQuery<TArgs extends unknown[], TData>(
      *   });
      * ```
      *
-     * Example using `fetcher.ts`:
+     * Example using `http.ts`:
      * ```
      *   const getUserQuery = sharedQuery({
      *     queryName: "getUser",
@@ -749,7 +749,8 @@ export function sharedQuery<TArgs extends unknown[], TData>(
      *       const signal = getUserQuery.getAbortSignal([userId]);
      *
      *       // Pass the signal to fetch so that it can be aborted.
-     *       return fetcher.url(`/users/${userId}`).options({ signal }).get().json();
+     *       const response = await http.get(`/users/${userId}`, { signal });
+     *       return await response.json();
      *     },
      *   });
      * ```
