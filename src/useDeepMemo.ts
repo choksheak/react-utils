@@ -10,7 +10,7 @@
  * arguments, but it might be useful for your own use cases.
  */
 
-import isEqual from "lodash/isEqual";
+import { isEqual } from "lodash-es";
 import { useMemo, useState } from "react";
 
 /**
