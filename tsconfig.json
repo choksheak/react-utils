@@ -6,20 +6,24 @@
     "**/*.test.ts"
   ],
   "compilerOptions": {
-    "module": "nodenext",
+    "module": "esnext",
     "target": "esnext",
     "lib": [
       "dom",
       "dom.iterable",
       "esnext"
     ],
+    "types": [
+      "node"
+    ],
     "declaration": true,
     "strict": true,
-    "moduleResolution": "nodenext",
-    "jsx": "react",
+    "moduleResolution": "bundler",
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "noEmit": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "ignoreDeprecations": "6.0"
   }
 }

@@ -5,23 +5,17 @@ const DIST_DIR = path.join(process.cwd(), "dist");
 const PACKAGE_JSON_PATH = path.join(DIST_DIR, "package.json");
 
 // Type definitions for package.json structure
-type EnvToFile = {
-  production: string;
-  development: string;
-  default: string;
-};
 
 type ExportEntry =
   | string
   | {
       types: string;
-      import: EnvToFile;
-      require: EnvToFile;
+      import: string;
+      require: string;
     };
 
 type PackageJson = {
   exports?: Record<string, ExportEntry>;
-  typesVersions?: Record<"*", Record<string, string[]>>;
   [key: string]: unknown;
 };
 
@@ -57,37 +51,26 @@ async function generateExportsConfig() {
       return;
     }
 
+    console.log(`Found modules: ${Array.from(moduleBaseNames).join(", ")}`);
+
     // 2. Build the 'exports' object
     const exports: Record<string, ExportEntry> = {
       // Must include the package.json itself
       "./package.json": "./package.json",
+      ".": {
+        types: "./index.d.ts",
+        import: "./index.mjs",
+        require: "./index.cjs",
+      },
     };
-
-    // 3. Build the 'typesVersions' object
-    const typesVersions: PackageJson["typesVersions"] = {
-      "*": {},
-    };
-
-    console.log(`Found modules: ${Array.from(moduleBaseNames).join(", ")}`);
 
     for (const name of Array.from(moduleBaseNames).sort()) {
       // Exports entry
       exports[`./${name}`] = {
         types: `./${name}.d.ts`,
-        import: {
-          production: `./${name}.min.mjs`,
-          development: `./${name}.mjs`,
-          default: `./${name}.mjs`,
-        },
-        require: {
-          production: `./${name}.min.cjs`,
-          development: `./${name}.cjs`,
-          default: `./${name}.cjs`,
-        },
+        import: `./${name}.mjs`,
+        require: `./${name}.cjs`,
       };
-
-      // TypesVersions entry
-      typesVersions["*"][name] = [`./${name}.d.ts`];
     }
 
     // 4. Read, update, and write package.json
@@ -96,7 +79,6 @@ async function generateExportsConfig() {
 
     // Merge new exports (overwriting existing ones, except for standard fields)
     packageJson.exports = exports;
-    packageJson.typesVersions = typesVersions;
 
     // Use two spaces for indentation for standard package.json format
     await fs.writeFile(
@@ -105,9 +87,7 @@ async function generateExportsConfig() {
     );
 
     console.log(`Successfully updated ${PACKAGE_JSON_PATH}:`);
-    console.log(
-      `- Added ${moduleBaseNames.size} entries to "exports" and "typesVersions".`,
-    );
+    console.log(`- Added ${moduleBaseNames.size} entries to "exports".`);
   } catch (error) {
     console.error("An error occurred during export generation:", error);
     process.exit(1);
