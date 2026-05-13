@@ -337,7 +337,9 @@ export function sharedQuery<TArgs extends unknown[], TData>(
   }
 
   if (seenQueryNames.has(queryName)) {
-    throw new Error(`Duplicate shared query name "${queryName}"`);
+    // In hot reloads, this keeps on triggering. So we just warn and not throw
+    // an error.
+    console.warn(`Duplicate shared query name "${queryName}"`);
   }
   seenQueryNames.add(queryName);
 
