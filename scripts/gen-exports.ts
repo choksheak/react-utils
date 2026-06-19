@@ -80,6 +80,11 @@ async function generateExportsConfig() {
     // Merge new exports (overwriting existing ones, except for standard fields)
     packageJson.exports = exports;
 
+    // Remove unneeded fields.
+    delete packageJson.scripts;
+    delete packageJson["simple-git-hooks"];
+    delete packageJson["lint-staged"];
+
     // Use two spaces for indentation for standard package.json format
     await fs.writeFile(
       PACKAGE_JSON_PATH,
