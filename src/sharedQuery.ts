@@ -308,28 +308,44 @@ export function configureSharedQuery(config: Partial<SharedQueryConfig>) {
 /** Whether this is a normal query or an explicit refetch. */
 type QueryType = "query" | "refetch";
 
-// Disallow duplicate query names.
-const seenQueryNames = new Set<string>();
+const moduleQueryRegistry = new Map<string, unknown>();
 
 /**
- * Create a reusable shared query object that can be used to auto de-duplicate
- * and cache all data fetches, with auto-expiration and staleness checks.
- *
- * Each `queryName` must be unique, and can only be declared once, most often
- * in the top level scope. The queryName is mainly used for logging and also
- * used as the storage key when you use the top-level `persistTo`.
- *
- * Example:
- * ```
- *   export const usersQuery = sharedQuery({
- *     queryName: "users",
- *     queryFn: listUsers,
- *     persistTo: "indexedDb",
- *     staleMs: MS_PER_DAY,
- *   });
- * ```
+ * When bundlers duplicate this module across chunks, each copy would otherwise
+ * create a separate queryState (different pubSub keys in the same store).
+ * Return the same SharedQuery for a given queryName app-wide.
  */
-export function sharedQuery<TArgs extends unknown[], TData>(
+function getOrCreateQueryRegistry(): Map<string, unknown> {
+  if (typeof window !== "undefined") {
+    const g = window.globalThis as {
+      reactUtilsQueryRegistry?: Map<string, unknown>;
+    };
+    return (g.reactUtilsQueryRegistry ??= new Map());
+  }
+  return moduleQueryRegistry;
+}
+
+// Split out function to auto-derive the return type.
+function sharedQuery1<TArgs extends unknown[], TData>(
+  options: SharedQueryOptions<TArgs, TData>,
+) {
+  const registry = getOrCreateQueryRegistry();
+  const key = options.queryName || (options as QueryTargetWithUrl).url;
+
+  const existing = registry.get(
+    options.queryName || (options as QueryTargetWithUrl).url,
+  );
+  if (existing) {
+    return existing;
+  }
+
+  const obj = sharedQuery2(options);
+  registry.set(key, obj);
+  return obj;
+}
+
+// Split out function to auto-derive the return type.
+function sharedQuery2<TArgs extends unknown[], TData>(
   // The name could have been auto-generated, but we let the user give us a
   // human-readable name that can be identified quickly in the logs.
   options: SharedQueryOptions<TArgs, TData>,
@@ -341,13 +357,6 @@ export function sharedQuery<TArgs extends unknown[], TData>(
   if (!queryName) {
     throw new Error(`Either queryName or url must be specified.`);
   }
-
-  if (seenQueryNames.has(queryName)) {
-    // In hot reloads, this keeps on triggering. So we just warn and not throw
-    // an error.
-    console.warn(`Duplicate shared query name "${queryName}"`);
-  }
-  seenQueryNames.add(queryName);
 
   const inflightQueries = new Map<
     string,
@@ -911,8 +920,34 @@ export function sharedQuery<TArgs extends unknown[], TData>(
 }
 
 export type SharedQuery<TArgs extends unknown[], TData> = ReturnType<
-  typeof sharedQuery<TArgs, TData>
+  typeof sharedQuery2<TArgs, TData>
 >;
+
+/**
+ * Create a reusable shared query object that can be used to auto de-duplicate
+ * and cache all data fetches, with auto-expiration and staleness checks.
+ *
+ * Each `queryName` must be unique, and can only be declared once, most often
+ * in the top level scope. The queryName is mainly used for logging and also
+ * used as the storage key when you use the top-level `persistTo`.
+ *
+ * Example:
+ * ```
+ *   export const usersQuery = sharedQuery({
+ *     queryName: "users",
+ *     queryFn: listUsers,
+ *     persistTo: "indexedDb",
+ *     staleMs: MS_PER_DAY,
+ *   });
+ * ```
+ */
+export function sharedQuery<TArgs extends unknown[], TData>(
+  // The name could have been auto-generated, but we let the user give us a
+  // human-readable name that can be identified quickly in the logs.
+  options: SharedQueryOptions<TArgs, TData>,
+) {
+  return sharedQuery1(options) as SharedQuery<TArgs, TData>;
+}
 
 // Using any so that we don't need to typecast later.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
