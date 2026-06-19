@@ -234,6 +234,8 @@ export function sharedState<T>(
   }
 
   const obj = {
+    defaultValue,
+
     /** Allow users to await for the completion of data init. */
     readyPromise,
 

@@ -84,6 +84,7 @@
  */
 
 import { http, retries } from "@choksheak/ts-utils/http";
+import { nonNil } from "@choksheak/ts-utils/nonNil";
 import getByteSize from "object-sizeof";
 import {
   SetStateAction,
@@ -143,9 +144,14 @@ export type UseQueryResult<TData> = QueryStateValue<TData> &
     abortCurrentQuery: (reason?: unknown) => boolean;
 
     /**
+     * Let the caller get the data immediately no matter what.
+     */
+    getCachedOrFetch: () => Promise<TData>;
+
+    /**
      * Manually refresh the data by doing a new query.
      */
-    refetch: () => Promise<void>;
+    refetch: () => Promise<TData | undefined>;
 
     /**
      * If you got the data from somewhere else (e.g. an in-memory data update),
@@ -973,8 +979,8 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
   }, [query.keepLastNonEmptyData, queryStateValue.data]);
 
   // The fetch logic wrapped in useCallback to be stable for useEffect
-  const execute = useCallback(
-    async (isRefetch: boolean) => {
+  const executeQuery = useCallback(
+    async (isRefetch: boolean): Promise<TData | undefined> => {
       query.log(
         `Begin executing shared query ${queryKey}, isRefetch=${isRefetch}`,
       );
@@ -1010,6 +1016,8 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
         // Make sure to reset loading to false.
         setQueryStateValue({ ...state, loading: false });
+
+        return state.data;
       } catch (e) {
         if (!isMounted.current) return;
 
@@ -1032,13 +1040,13 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     isMounted.current = true;
     query.mount(queryKey);
 
-    void execute(false);
+    void executeQuery(false);
 
     return () => {
       isMounted.current = false;
       query.unmount(queryKey);
     };
-  }, [execute, query, queryKey]);
+  }, [executeQuery, query, queryKey]);
 
   return useMemo(() => {
     return {
@@ -1049,6 +1057,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         queryStateValue.data !== undefined
           ? queryStateValue.data
           : lastNonEmptyData,
+
       latestData: queryStateValue.data,
 
       // This works only if the user-given queryFn supports abort. If not,
@@ -1059,8 +1068,18 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         controller?.abort(reason);
         return Boolean(controller);
       },
-      refetch: (): Promise<void> => {
-        return execute(true);
+      getCachedOrFetch: async (): Promise<TData> => {
+        const data = await query.getCachedOrFetch(...stableArgs);
+
+        return nonNil(
+          data.data,
+          typeof data.error === "string"
+            ? data.error
+            : JSON.stringify(data.error),
+        );
+      },
+      refetch: (): Promise<TData | undefined> => {
+        return executeQuery(true);
       },
       setData: (data: TData, dataUpdatedMs?: number): void => {
         query.setData(queryKey, data, dataUpdatedMs);
@@ -1069,5 +1088,12 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         query.deleteData(queryKey);
       },
     } satisfies UseQueryResult<TData>;
-  }, [execute, lastNonEmptyData, query, queryKey, queryStateValue]);
+  }, [
+    executeQuery,
+    lastNonEmptyData,
+    query,
+    queryKey,
+    queryStateValue,
+    stableArgs,
+  ]);
 }
