@@ -157,7 +157,23 @@ function createPubSubStore() {
   } as const;
 }
 
-const pubSubStore = createPubSubStore();
+/**
+ * Ensure we always use the same store. If we create two stores, then the
+ * reactive updates will fail.
+ */
+function getOrCreatePubSubStore() {
+  if (typeof window !== "undefined") {
+    const t = window.globalThis as unknown as {
+      reactUtilsPubSubStore: ReturnType<typeof createPubSubStore> | undefined;
+    };
+    return (
+      t.reactUtilsPubSubStore || (t.reactUtilsPubSubStore = createPubSubStore())
+    );
+  }
+  return createPubSubStore();
+}
+
+const pubSubStore = getOrCreatePubSubStore();
 
 /************************************************************************/
 /* Shared state implementation                                          */
