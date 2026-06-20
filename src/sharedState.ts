@@ -78,6 +78,9 @@ export const SharedStateConfig = {
    * the top level scope when the shared state is defined.
    */
   lazyLoad: false,
+
+  /** Default to log to console. */
+  log: (...args: unknown[]) => console.log("[sharedState]", ...args),
 };
 
 export type SharedStateConfig = typeof SharedStateConfig;
@@ -183,7 +186,12 @@ const STORAGE_KEY = "state";
 
 /** Options to configure a shared state. */
 export type SharedStateOptions<T> = {
+  /** Load from store only on first use of useSharedState(). */
   lazyLoad?: boolean;
+  /** Used for debug logging. */
+  name?: string;
+  /** Customize the logger. */
+  log?: (...args: unknown[]) => void;
 } & StorageOptions<T>;
 
 let stateKey = 0;
@@ -218,8 +226,14 @@ export function sharedState<T>(
 
   const resolveReadyPromise = readyResolve;
 
+  const log = options?.log || SharedStateConfig.log;
+
   // We'll make a new key with each hot reload, but that's ok.
   const pubSubKey = String(getNextStateKey());
+
+  if (log && options?.name) {
+    log(`${options.name} -> ${pubSubKey}`);
+  }
 
   // Use max of 1 storage adapter per shared state.
   const storageAdapter = getStorageAdapter(
@@ -245,12 +259,16 @@ export function sharedState<T>(
   }
 
   const obj = {
+    name: options?.name,
     defaultValue,
+    pubSubKey,
 
     /** Allow users to await for the completion of data init. */
     readyPromise,
 
+    storeExpiryMs: SharedStateConfig.storeExpiryMs,
     lazy,
+    storageAdapter,
 
     initStarted: false,
     initDone: false,

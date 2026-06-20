@@ -237,9 +237,7 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = QueryTarget<
    */
   expiryMs?: number;
 
-  /**
-   * Trigger background re-fetch if stale.
-   */
+  /** Trigger background re-fetch if stale. */
   refetchOnStale?: boolean;
 
   /**
@@ -268,9 +266,7 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = QueryTarget<
    */
   keepLastNonEmptyData?: boolean;
 
-  /**
-   * Customize the logger.
-   */
+  /** Customize the logger. */
   log?: (...args: unknown[]) => void;
 } & SharedStateOptions<SharedQueryState<TData>>;
 
@@ -498,6 +494,9 @@ function sharedQuery2<TArgs extends unknown[], TData>(
   const keepLastNonEmptyData = Boolean(options?.keepLastNonEmptyData);
 
   const log = options?.log ?? SharedQueryConfig.log;
+
+  // Debug logging.
+  options.name = queryName;
 
   const queryState = sharedState<SharedQueryState<TData>>(
     {}, // defaultValue
