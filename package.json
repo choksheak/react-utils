@@ -1,7 +1,7 @@
 {
   "name": "@choksheak/react-utils",
   "license": "The Unlicense",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "packageManager": "pnpm@10.18.3",
   "pnpm": {
     "packageExtensions": {
