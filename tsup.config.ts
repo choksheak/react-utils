@@ -7,10 +7,9 @@ export default defineConfig([
     format: ["cjs", "esm"],
     dts: true,
     splitting: true,
-    bundle: false,
     external: ["react", "react-dom"],
     outExtension: ({ format }) => ({
-      js: format === "cjs" ? ".cjs" : ".mjs",
+      js: format === "cjs" ? ".cjs" : ".js",
     }),
   },
   // Minified production build
@@ -18,12 +17,11 @@ export default defineConfig([
     format: ["cjs", "esm"],
     dts: false, // No need for duplicate declarations
     sourcemap: true,
-    minify: true,
+    minify: false,
     splitting: true,
-    bundle: false,
     external: ["react", "react-dom"],
     outExtension: ({ format }) => ({
-      js: format === "cjs" ? ".min.cjs" : ".min.mjs",
+      js: format === "cjs" ? ".min.cjs" : ".min.js",
     }),
   },
 ]);

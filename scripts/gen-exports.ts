@@ -59,7 +59,7 @@ async function generateExportsConfig() {
       "./package.json": "./package.json",
       ".": {
         types: "./index.d.ts",
-        import: "./index.mjs",
+        import: "./index.js",
         require: "./index.cjs",
       },
     };
@@ -68,7 +68,7 @@ async function generateExportsConfig() {
       // Exports entry
       exports[`./${name}`] = {
         types: `./${name}.d.ts`,
-        import: `./${name}.mjs`,
+        import: `./${name}.js`,
         require: `./${name}.cjs`,
       };
     }
