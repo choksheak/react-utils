@@ -163,8 +163,8 @@ function createPubSubStore() {
  */
 function getOrCreatePubSubStore() {
   if (typeof window !== "undefined") {
-    const t = window.globalThis as unknown as {
-      reactUtilsPubSubStore: ReturnType<typeof createPubSubStore> | undefined;
+    const t = window.globalThis as {
+      reactUtilsPubSubStore?: ReturnType<typeof createPubSubStore>;
     };
     return (
       t.reactUtilsPubSubStore || (t.reactUtilsPubSubStore = createPubSubStore())
@@ -188,6 +188,16 @@ export type SharedStateOptions<T> = {
 
 let stateKey = 0;
 
+// Try to make this safe across hot reloads and bundling.
+function getNextStateKey() {
+  if (typeof window !== "undefined") {
+    const t = window.globalThis as { reactUtilsStateKey?: number };
+    t.reactUtilsStateKey = (t.reactUtilsStateKey ?? 0) + 1;
+    return t.reactUtilsStateKey;
+  }
+  return ++stateKey;
+}
+
 /**
  * Create a new shared state object. Put this code at the top level scope:
  *
@@ -208,7 +218,8 @@ export function sharedState<T>(
 
   const resolveReadyPromise = readyResolve;
 
-  const pubSubKey = String(stateKey++);
+  // We'll make a new key with each hot reload, but that's ok.
+  const pubSubKey = String(getNextStateKey());
 
   // Use max of 1 storage adapter per shared state.
   const storageAdapter = getStorageAdapter(

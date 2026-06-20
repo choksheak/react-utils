@@ -332,9 +332,7 @@ function sharedQuery1<TArgs extends unknown[], TData>(
   const registry = getOrCreateQueryRegistry();
   const key = options.queryName || (options as QueryTargetWithUrl).url;
 
-  const existing = registry.get(
-    options.queryName || (options as QueryTargetWithUrl).url,
-  );
+  const existing = registry.get(key);
   if (existing) {
     return existing;
   }
