@@ -6,7 +6,8 @@ export default defineConfig([
     clean: true,
     format: ["cjs", "esm"],
     dts: true,
-    splitting: false,
+    splitting: true,
+    bundle: false,
     external: ["react", "react-dom"],
     outExtension: ({ format }) => ({
       js: format === "cjs" ? ".cjs" : ".mjs",
@@ -18,9 +19,8 @@ export default defineConfig([
     dts: false, // No need for duplicate declarations
     sourcemap: true,
     minify: true,
-    // Don't use chunk-* files - that encourages bundlers to treat them as
-    // separate entry points.
-    splitting: false,
+    splitting: true,
+    bundle: false,
     external: ["react", "react-dom"],
     outExtension: ({ format }) => ({
       js: format === "cjs" ? ".min.cjs" : ".min.mjs",
