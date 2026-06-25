@@ -59,6 +59,8 @@ import { Dispatch, SetStateAction, useSyncExternalStore } from "react";
 
 import { getStorageAdapter, StorageOptions } from "./storage";
 
+const hasWindow = typeof window !== "undefined";
+
 /************************************************************************/
 /* Global config                                                        */
 /************************************************************************/
@@ -80,7 +82,10 @@ export const SharedStateConfig = {
   lazyLoad: false,
 
   /** Default to log to console. */
-  log: (...args: unknown[]) => console.log("[sharedState]", ...args),
+  log: (...args: unknown[]) => {
+    if (!hasWindow) return; // don't log in the SSR server side
+    console.log("[sharedState]", ...args);
+  },
 };
 
 export type SharedStateConfig = typeof SharedStateConfig;
@@ -165,7 +170,7 @@ function createPubSubStore() {
  * reactive updates will fail.
  */
 function getOrCreatePubSubStore() {
-  if (typeof window !== "undefined") {
+  if (hasWindow) {
     const t = window.globalThis as {
       reactUtilsPubSubStore?: ReturnType<typeof createPubSubStore>;
     };
@@ -198,7 +203,7 @@ let stateKey = 0;
 
 // Try to make this safe across hot reloads and bundling.
 function getNextStateKey() {
-  if (typeof window !== "undefined") {
+  if (hasWindow) {
     const t = window.globalThis as { reactUtilsStateKey?: number };
     t.reactUtilsStateKey = (t.reactUtilsStateKey ?? 0) + 1;
     return t.reactUtilsStateKey;

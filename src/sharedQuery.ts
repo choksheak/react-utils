@@ -101,6 +101,8 @@ import { PersistTo } from "./storage";
 import { stringifyDeterministicForKeys } from "./stringify";
 import { useDeepMemo } from "./useDeepMemo";
 
+const hasWindow = typeof window !== "undefined";
+
 /** Type of the queryFn used to fetch the data from source. */
 export type QueryFn<TArgs extends unknown[], TData> = (
   ...args: TArgs
@@ -291,7 +293,10 @@ export const SharedQueryConfig = {
   maxBytes: 100_000,
 
   /** Default to log to console. */
-  log: (...args: unknown[]) => console.log("[sharedQuery]", ...args),
+  log: (...args: unknown[]) => {
+    if (!hasWindow) return; // don't log in the SSR server side
+    console.log("[sharedQuery]", ...args);
+  },
 };
 
 export type SharedQueryConfig = typeof SharedQueryConfig;
@@ -312,7 +317,7 @@ const moduleQueryRegistry = new Map<string, unknown>();
  * Return the same SharedQuery for a given queryName app-wide.
  */
 function getOrCreateQueryRegistry(): Map<string, unknown> {
-  if (typeof window !== "undefined") {
+  if (hasWindow) {
     const g = window.globalThis as {
       reactUtilsQueryRegistry?: Map<string, unknown>;
     };
