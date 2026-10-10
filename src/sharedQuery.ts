@@ -981,6 +981,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
   const [queryState, setQueryState] = useSharedState(query.queryState);
 
   const isMounted = useRef(true);
+  const initDone = useRef(false);
 
   const queryKey = useMemo(
     () => query.getQueryKey(stableArgs),
@@ -1073,17 +1074,24 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     [query, queryKey, setQueryStateValue, stableArgs],
   );
 
+  // Initial fetch.
+  useEffect(() => {
+    if (initDone.current) return;
+    initDone.current = true;
+
+    void executeQuery(false);
+  }, [executeQuery]);
+
+  // Track mounted state.
   useEffect(() => {
     isMounted.current = true;
     query.mount(queryKey);
-
-    void executeQuery(false);
 
     return () => {
       isMounted.current = false;
       query.unmount(queryKey);
     };
-  }, [executeQuery, query, queryKey]);
+  }, [query, queryKey]);
 
   return useMemo(() => {
     return {
