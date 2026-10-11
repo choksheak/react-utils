@@ -253,14 +253,22 @@ export function sharedState<T>(
   const lazyLoad = options?.lazyLoad;
   const lazy = lazyLoad !== undefined ? lazyLoad : SharedStateConfig.lazyLoad;
 
-  function completeInit(stored: T | undefined) {
-    const value = stored !== undefined ? stored : defaultValue;
+  // Returns true if we published the value to the listeners.
+  function completeInit(stored: T | undefined): boolean {
+    // Async storage reads can finish after setValue()/delete(). Don't overwrite
+    // newer in-memory values with a stale snapshot from when init started.
+    if (obj.initDone) {
+      return false;
+    }
 
+    const value = stored !== undefined ? stored : defaultValue;
     pubSubStore.set(pubSubKey, value);
 
     // @ts-expect-error ts(2540) - Assign to readonly property.
     obj.initDone = true;
     resolveReadyPromise();
+
+    return true;
   }
 
   const obj = {
@@ -318,14 +326,20 @@ export function sharedState<T>(
     },
 
     /** Set the value of the shared state. */
-    setValue(next: SetStateAction<T>): void {
+    setValue(next: SetStateAction<T>): Promise<void> | void {
       if (typeof next === "function") {
         const prev = pubSubStore.get<T>(pubSubKey);
         next = (next as (p: T) => T)(prev);
       }
 
-      pubSubStore.set(pubSubKey, next);
-      void obj.setInStore(next);
+      // Win race to complete init before init with default value.
+      const updated = completeInit(next);
+
+      if (!updated) {
+        pubSubStore.set(pubSubKey, next);
+      }
+
+      return obj.setInStore(next);
     },
 
     /**
@@ -333,8 +347,7 @@ export function sharedState<T>(
      * back to the given default value.
      */
     delete(): Promise<void> | void {
-      pubSubStore.set(pubSubKey, defaultValue);
-      return storageAdapter?.set(STORAGE_KEY, defaultValue);
+      return obj.setValue(defaultValue);
     },
 
     /** Initial default handling. */
@@ -348,7 +361,7 @@ export function sharedState<T>(
       // Allow sync vs async code paths. This allows init to be fully completed
       // from store before the sharedState() function returns.
       if (maybePromise instanceof Promise) {
-        return maybePromise.then(completeInit);
+        maybePromise.then(completeInit);
       } else {
         const stored = maybePromise;
         completeInit(stored);
