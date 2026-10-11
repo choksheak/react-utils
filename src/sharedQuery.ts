@@ -840,8 +840,8 @@ function sharedQuery2<TArgs extends unknown[], TData>(
         queryState.getSnapshot()?.[queryKey];
 
       // Check for expiration.
-      if (stateValue?.lastUpdatedMs) {
-        if (isExpired(stateValue.lastUpdatedMs)) {
+      if (stateValue?.dataUpdatedMs) {
+        if (isExpired(stateValue.dataUpdatedMs)) {
           obj.deleteData(queryKey);
           return undefined;
         }
