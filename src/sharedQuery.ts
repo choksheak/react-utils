@@ -576,17 +576,18 @@ function sharedQuery2<TArgs extends unknown[], TData>(
       needUpdate = true;
     };
 
-    let entriesByTimeAscending = Object.entries(newState).sort(
-      (entry1, entry2) => entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
+    const entriesByDataUpdatedMsAsc = Object.entries(newState).sort(
+      (entry1, entry2) =>
+        (entry1[1].dataUpdatedMs ?? 0) - (entry2[1].dataUpdatedMs ?? 0),
     );
 
     // Clean up all expired entries. Note that the auto-expiration in the
     // storage adapter only applies to the entire state, which contains all
     // the different query keys and their values. Each query key has its own
     // timestamp and we need to apply our own expiration here.
-    for (const [key] of entriesByTimeAscending) {
+    for (const [key] of entriesByDataUpdatedMsAsc) {
       // Anything after this is not expired yet.
-      if (!isExpired(newState[key].lastUpdatedMs)) {
+      if (!isExpired(newState[key]?.dataUpdatedMs ?? 0)) {
         break;
       }
 
@@ -594,14 +595,12 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     }
 
     if (numToCut > 0 || bytesToCut > 0) {
-      if (needUpdate) {
-        entriesByTimeAscending = Object.entries(newState).sort(
-          (entry1, entry2) => entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
-        );
-      }
+      const entriesByLastUpdatedMsAsc = Object.entries(newState).sort(
+        (entry1, entry2) => entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
+      );
 
       // Clean up starting from oldest entry first.
-      for (const [key] of entriesByTimeAscending) {
+      for (const [key] of entriesByLastUpdatedMsAsc) {
         deleteKeyIfNotMounted(key, false);
 
         if (numToCut <= 0 && bytesToCut <= 0) {
