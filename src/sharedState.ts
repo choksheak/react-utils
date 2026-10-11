@@ -264,6 +264,11 @@ export function sharedState<T>(
     const value = stored !== undefined ? stored : defaultValue;
     pubSubStore.set(pubSubKey, value);
 
+    // If we init from setValue()/delete(), then initStarted might not have
+    // been initialized yet, so just set it manually here.
+    // @ts-expect-error ts(2540) - Assign to readonly property.
+    obj.initStarted = true;
+
     // @ts-expect-error ts(2540) - Assign to readonly property.
     obj.initDone = true;
     resolveReadyPromise();
@@ -356,15 +361,30 @@ export function sharedState<T>(
       // @ts-expect-error ts(2540) - Assign to readonly property.
       obj.initStarted = true;
 
-      const maybePromise = obj.getFromStore();
+      // Ensure that the readyPromise always resolves even if getFromStore()
+      // throws an error.
+      try {
+        const storedOrPromise = obj.getFromStore();
 
-      // Allow sync vs async code paths. This allows init to be fully completed
-      // from store before the sharedState() function returns.
-      if (maybePromise instanceof Promise) {
-        maybePromise.then(completeInit);
-      } else {
-        const stored = maybePromise;
-        completeInit(stored);
+        // Allow sync vs async code paths. This allows init to be fully completed
+        // from store before the sharedState() function returns.
+        if (storedOrPromise instanceof Promise) {
+          storedOrPromise.then(completeInit).catch((e) => {
+            log(
+              `[ERROR] Failed to load from store${options?.name ? ` (${options.name})` : ""}:`,
+              e,
+            );
+            completeInit(undefined);
+          });
+        } else {
+          completeInit(storedOrPromise);
+        }
+      } catch (e) {
+        log(
+          `[ERROR] Error while loading from store${options?.name ? ` (${options.name})` : ""}:`,
+          e,
+        );
+        completeInit(undefined);
       }
     },
   } as const;
