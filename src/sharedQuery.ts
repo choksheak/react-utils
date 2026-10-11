@@ -782,6 +782,9 @@ function sharedQuery2<TArgs extends unknown[], TData>(
       return obj.getAbortControllerByKey(queryKey)?.signal ?? null;
     },
 
+    isExpired,
+    isStale,
+
     /** For cached data, we need to return the correct timestamps as well. */
     async getCachedOrFetch(...args: TArgs): Promise<QueryStateValue<TData>> {
       // Important: wait for data to be loaded from cache first before trying to
@@ -802,6 +805,13 @@ function sharedQuery2<TArgs extends unknown[], TData>(
         // Return cached value if not stale.
         if (!isStale(cached.dataUpdatedMs ?? 0)) {
           log(`Return fresh data ${queryKey} from cache without fetching`);
+
+          // Update lastUpdatedMs as the last accessed time.
+          queryState.setValue((prev) => ({
+            ...prev,
+            [queryKey]: { ...cached, lastUpdatedMs: Date.now() },
+          }));
+
           return cached;
         }
 
@@ -1073,20 +1083,6 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     [query, queryKey, setQueryStateValue, stableArgs],
   );
 
-  // Initial fetch.
-  useEffect(() => {
-    // No need to init the same queryKey more than once.
-    if (initQueryKeyDone.current === queryKey) return;
-    initQueryKeyDone.current = queryKey;
-
-    // No need to load the data if it is already present.
-    if (queryStateValue.data !== undefined) {
-      return;
-    }
-
-    void executeQuery(false);
-  }, [executeQuery, queryKey, queryStateValue.data]);
-
   // Track mounted state.
   useEffect(() => {
     isMounted.current = true;
@@ -1097,6 +1093,33 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
       query.unmount(queryKey);
     };
   }, [query, queryKey]);
+
+  // Initial fetch.
+  useEffect(() => {
+    // No need to init the same queryKey more than once.
+    if (initQueryKeyDone.current === queryKey) return;
+    initQueryKeyDone.current = queryKey;
+
+    // No need to load the data if it is already present.
+    if (
+      queryStateValue.data !== undefined &&
+      !query.isExpired(queryStateValue.dataUpdatedMs ?? 0)
+    ) {
+      if (query.isStale(queryStateValue.dataUpdatedMs ?? 0)) {
+        query.log(`Auto-refresh stale data for ${queryKey}`);
+        void executeQuery(false);
+      }
+      return;
+    }
+
+    void executeQuery(false);
+  }, [
+    executeQuery,
+    query,
+    queryKey,
+    queryStateValue.data,
+    queryStateValue.dataUpdatedMs,
+  ]);
 
   return useMemo(() => {
     return {
