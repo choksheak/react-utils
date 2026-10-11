@@ -73,7 +73,7 @@
   "homepage": "https://github.com/choksheak/react-utils#readme",
   "devDependencies": {
     "@choksheak/bump-version": "^0.1.2",
-    "@choksheak/ts-utils": "^0.3.8",
+    "@choksheak/ts-utils": "^0.4.6",
     "@eslint/compat": "^1.4.0",
     "@eslint/js": "^9.38.0",
     "@swc/core": "^1.14.0",
@@ -110,7 +110,7 @@
     "vitest": "^4.0.3"
   },
   "peerDependencies": {
-    "@choksheak/ts-utils": ">=0.3.8",
+    "@choksheak/ts-utils": ">=0.4.6",
     "react": ">=16"
   },
   "dependencies": {

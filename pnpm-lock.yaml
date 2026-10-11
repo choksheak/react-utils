@@ -27,8 +27,8 @@ importers:
         specifier: ^0.1.2
         version: 0.1.4
       '@choksheak/ts-utils':
-        specifier: ^0.3.8
-        version: 0.3.8
+        specifier: ^0.4.6
+        version: 0.4.6
       '@eslint/compat':
         specifier: ^1.4.0
         version: 1.4.1(eslint@9.39.4(jiti@2.6.1))
@@ -199,8 +199,8 @@ packages:
     resolution: {integrity: sha512-V251sFH4Ge+1lWiTFYKoQEdekNnInHH6FmDxMS2SOSnHFxOF68DCPAuX72t/KmGgv7Z73SM6Z36CqQ9H83s9HA==}
     hasBin: true
 
-  '@choksheak/ts-utils@0.3.8':
-    resolution: {integrity: sha512-EOjd6ELKHgh4nJOTygACPs4elPB/02nJttwF8E9ehHA2UxXXYv9PHORTZ9gRXzOsg6QKCNOa8GZXVT6ml65iXw==}
+  '@choksheak/ts-utils@0.4.6':
+    resolution: {integrity: sha512-69Vrg51n9a5WjR89gVFcE6E6zOsylV5yw8aj4Phfgs2BfEusCgnPH0ncTBym+snKjpHsgn3BwsQiveympyi81Q==}
 
   '@emnapi/core@1.9.2':
     resolution: {integrity: sha512-UC+ZhH3XtczQYfOlu3lNEkdW/p4dsJ1r/bP7H8+rhao3TTTMO1ATq/4DdIi23XuGoFY+Cz0JmCbdVl0hz9jZcA==}
@@ -3260,7 +3260,7 @@ snapshots:
 
   '@choksheak/bump-version@0.1.4': {}
 
-  '@choksheak/ts-utils@0.3.8':
+  '@choksheak/ts-utils@0.4.6':
     dependencies:
       simple-git-hooks: 2.13.1
 
