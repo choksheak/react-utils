@@ -499,6 +499,18 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     options,
   );
 
+  /** Returns a key to identify requests based on the given args. */
+  function getQueryKey(args: TArgs): string {
+    let s = stringifyDeterministicForKeys(args);
+
+    // Ensure the query key is not too long.
+    if (s.length > 30) {
+      s = XXH.h32(s, 0x99ee).toString(16).slice(2); // remove "0x"
+    }
+
+    return queryName + ":" + s;
+  }
+
   function isStale(dataUpdatedMs: number): boolean {
     if (staleMs === 0) return true; // always stale
 
@@ -711,18 +723,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     keepLastNonEmptyData,
     log,
     queryState,
-
-    /** Returns a key to identify requests based on the given args. */
-    getQueryKey(args: TArgs): string {
-      let s = stringifyDeterministicForKeys(args);
-
-      // Ensure the query key is not too long.
-      if (s.length > 30) {
-        s = XXH.h32(s, 0x99ee).toString(16).slice(2); // remove "0x"
-      }
-
-      return queryName + ":" + s;
-    },
+    getQueryKey,
 
     /**
      * Get the AbortController to abort the inflight query (if any).
@@ -732,7 +733,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
      * signal, just use this function.
      */
     getAbortController(args: TArgs): AbortController | null {
-      const queryKey = obj.getQueryKey(args);
+      const queryKey = getQueryKey(args);
       return obj.getAbortControllerByKey(queryKey);
     },
 
@@ -781,7 +782,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
      * ```
      */
     getAbortSignal(args: TArgs): AbortSignal | null {
-      const queryKey = obj.getQueryKey(args);
+      const queryKey = getQueryKey(args);
       return obj.getAbortSignalByKey(queryKey);
     },
 
@@ -801,7 +802,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
       await queryState.readyPromise;
       const waitedMs = Date.now() - startMs;
 
-      const queryKey = obj.getQueryKey(args);
+      const queryKey = getQueryKey(args);
       const cached = getQueryValue(queryKey);
 
       if (waitedMs) {
@@ -868,7 +869,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
      * another fetch is already inflight.
      */
     async updateFromSource(...args: TArgs): Promise<TData> {
-      const key = obj.getQueryKey(args);
+      const key = getQueryKey(args);
       return await dedupedFetch(key, "query", ...args);
     },
 
@@ -877,7 +878,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
      * then this would be identical to calling `obj.updateFromSource()`.
      */
     async refetch(...args: TArgs): Promise<TData> {
-      const key = obj.getQueryKey(args);
+      const key = getQueryKey(args);
       return await dedupedFetch(key, "refetch", ...args);
     },
 
