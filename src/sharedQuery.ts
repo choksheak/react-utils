@@ -239,9 +239,6 @@ export type SharedQueryOptions<TArgs extends unknown[], TData> = QueryTarget<
    */
   expiryMs?: number;
 
-  /** Trigger background re-fetch if stale. */
-  refetchOnStale?: boolean;
-
   /**
    * Shortcut to set the localStorageKey or indexedDbKey automatically from
    * queryName. This is important because it avoids requiring the user to
@@ -279,9 +276,6 @@ export const SharedQueryConfig = {
 
   /** Keep in cache for a long time. */
   expiryMs: 30 * 86_400_000 /* MS_PER_DAY */,
-
-  /** Always refetch automatically if the data is stale. */
-  refetchOnStale: true,
 
   /** No default persistence configured. */
   persistTo: undefined as PersistTo | undefined,
@@ -431,9 +425,6 @@ function sharedQuery2<TArgs extends unknown[], TData>(
 
   const staleMs = options?.staleMs ?? SharedQueryConfig.staleMs;
   const expiryMs = options?.expiryMs ?? SharedQueryConfig.expiryMs;
-
-  const refetchOnStale =
-    options?.refetchOnStale ?? SharedQueryConfig.refetchOnStale;
 
   // Apply shortcut when using `persistTo`.
   // Specifying the `store` will take precedence over `persistTo`.
@@ -698,7 +689,6 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     refetchFn,
     expiryMs,
     staleMs,
-    refetchOnStale,
     maxSize,
     maxBytes,
     keepLastNonEmptyData,
@@ -815,11 +805,8 @@ function sharedQuery2<TArgs extends unknown[], TData>(
           return cached;
         }
 
-        // If stale, optionally update the data in the background.
-        if (refetchOnStale) {
-          log(`refetchOnStale for ${queryKey}`);
-          void dedupedFetch(queryKey, "query", ...args);
-        }
+        // If stale, update the data in the background.
+        void dedupedFetch(queryKey, "query", ...args);
 
         // Still return stale data immediately.
         log(`Returning stale data for ${queryKey}`);
