@@ -617,21 +617,38 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     );
   }
 
+  function getQueryValue(queryKey: string): QueryStateValue<TData> | undefined {
+    return queryState.getSnapshot()?.[queryKey];
+  }
+
+  /** Set the value of one entry inside the query state map. */
+  function setQueryValue(
+    queryKey: string,
+    next: SetStateAction<QueryStateValue<TData>>,
+  ) {
+    queryState.setValue((prev) => {
+      const value =
+        typeof next === "function"
+          ? next(prev[queryKey] ?? DEFAULT_QUERY_STATE_ENTRY)
+          : next;
+      return { ...prev, [queryKey]: value };
+    });
+
+    enforceSizeLimit();
+  }
+
+  /** Set the data of one entry inside the query state map. */
   function setData(
     queryKey: string,
     data: TData,
     dataUpdatedMs = Date.now(),
   ): void {
-    const entry: QueryStateValue<TData> = {
+    setQueryValue(queryKey, {
       lastUpdatedMs: Date.now(),
       loading: false,
       data,
       dataUpdatedMs,
-    };
-
-    queryState.setValue((prev) => ({ ...prev, [queryKey]: entry }));
-
-    enforceSizeLimit();
+    });
   }
 
   async function startFetching(
@@ -785,7 +802,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
       const waitedMs = Date.now() - startMs;
 
       const queryKey = obj.getQueryKey(args);
-      const cached = queryState.getSnapshot()?.[queryKey];
+      const cached = getQueryValue(queryKey);
 
       if (waitedMs) {
         log(`${queryKey}: Waited for ${waitedMs}ms before data is ready`);
@@ -825,15 +842,12 @@ function sharedQuery2<TArgs extends unknown[], TData>(
       };
     },
 
-    /** Get the entire stored entry for a query key. */
-    getQueryValue(queryKey: string): QueryStateValue<TData> | undefined {
-      return queryState.getSnapshot()?.[queryKey];
-    },
+    getQueryValue,
+    setQueryValue,
 
     /** Get the current stored data for a query key. */
     getData(queryKey: string): TData | undefined {
-      const stateValue: QueryStateValue<TData> | undefined =
-        queryState.getSnapshot()?.[queryKey];
+      const stateValue = getQueryValue(queryKey);
 
       // Check for expiration.
       if (stateValue?.dataUpdatedMs) {
@@ -974,7 +988,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
   // We don't expect users to provide a stable `args`, so stabilize it here.
   const stableArgs = useDeepMemo(args);
 
-  const [queryState, setQueryState] = useSharedState(query.queryState);
+  const [queryState] = useSharedState(query.queryState);
 
   const isMounted = useRef(true);
   const initQueryKeyDone = useRef("");
@@ -987,20 +1001,6 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
   // Init with empty object.
   const queryStateValue: QueryStateValue<TData> =
     queryState[queryKey] ?? DEFAULT_QUERY_STATE_ENTRY;
-
-  const setQueryStateValue = useCallback(
-    (next: SetStateAction<QueryStateValue<TData>>) => {
-      setQueryState((prev) => {
-        const clone = { ...prev };
-        clone[queryKey] =
-          typeof next === "function"
-            ? next(clone[queryKey] ?? DEFAULT_QUERY_STATE_ENTRY)
-            : next;
-        return clone;
-      });
-    },
-    [queryKey, setQueryState],
-  );
 
   // Keep the last non-empty data loaded in case you want to show a placeholder
   // during new loads.
@@ -1021,7 +1021,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
       if (!isMounted.current) return;
 
-      setQueryStateValue((prev) => ({
+      query.setQueryValue(queryKey, (prev) => ({
         // Keep old data and error.
         ...prev,
         lastUpdatedMs: Date.now(),
@@ -1049,7 +1049,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         if (!isMounted.current) return;
 
         // Make sure to reset loading to false.
-        setQueryStateValue({ ...state, loading: false });
+        query.setQueryValue(queryKey, { ...state, loading: false });
 
         return state.data;
       } catch (e) {
@@ -1057,7 +1057,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
         const now = Date.now();
 
-        setQueryStateValue((prev) => ({
+        query.setQueryValue(queryKey, (prev) => ({
           // Keep old data.
           ...prev,
           lastUpdatedMs: now,
@@ -1067,7 +1067,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         }));
       }
     },
-    [query, queryKey, setQueryStateValue, stableArgs],
+    [query, queryKey, stableArgs],
   );
 
   // Track mounted state.
