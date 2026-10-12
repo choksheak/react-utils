@@ -761,6 +761,53 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     }
   }
 
+  async function wrapLoading<T>(
+    queryKey: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    // Mark loading started.
+    if (!getQueryValue(queryKey)?.loading) {
+      setQueryValue(queryKey, (old) => ({ ...old, loading: true }));
+    }
+
+    try {
+      const data = await fn();
+
+      // Mark loading succeeded.
+      if (getQueryValue(queryKey)?.loading) {
+        setQueryValue(queryKey, (old) => {
+          // Remove error if any.
+          const clone = { ...old };
+          delete clone.error;
+          delete clone.errorUpdatedMs;
+
+          return {
+            ...clone,
+            loading: false,
+            lastUpdatedMs: Date.now(),
+          };
+        });
+      }
+
+      return data;
+    } catch (e) {
+      // Mark loading errored.
+      if (getQueryValue(queryKey)?.loading) {
+        setQueryValue(queryKey, (old) => {
+          return {
+            ...old,
+            loading: false,
+            lastUpdatedMs: Date.now(),
+            error: e,
+            errorUpdatedMs: Date.now(),
+          };
+        });
+      }
+
+      throw e;
+    }
+  }
+
   /** For cached data, we need to return the correct timestamps as well. */
   async function getCachedOrFetch(
     ...args: TArgs
@@ -866,18 +913,20 @@ function sharedQuery2<TArgs extends unknown[], TData>(
    * Do a new fetch even when the data is already cached, but don't fetch if
    * another fetch is already inflight.
    */
-  async function updateFromSource(...args: TArgs): Promise<TData> {
-    const key = getQueryKey(args);
-    return await dedupedFetch(key, "query", ...args);
+  async function fetch(queryKey: string, ...args: TArgs): Promise<TData> {
+    return await wrapLoading(queryKey, () =>
+      dedupedFetch(queryKey, "query", ...args),
+    );
   }
 
   /**
    * Perform an explicit refetch. If `options.refetchFn` was not specified,
-   * then this would be identical to calling `obj.updateFromSource()`.
+   * then this would be identical to calling `query.fetch()`.
    */
-  async function refetch(...args: TArgs): Promise<TData> {
-    const key = getQueryKey(args);
-    return await dedupedFetch(key, "refetch", ...args);
+  async function refetch(queryKey: string, ...args: TArgs): Promise<TData> {
+    return await wrapLoading(queryKey, () =>
+      dedupedFetch(queryKey, "refetch", ...args),
+    );
   }
 
   /** Delete all currently cached data & all inflight promises. */
@@ -931,7 +980,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     setData,
     deleteData,
     getCachedOrFetch,
-    updateFromSource,
+    fetch,
     refetch,
     clear,
     mount,
@@ -1040,7 +1089,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         let state: QueryStateValue<TData>;
 
         if (isRefetch) {
-          const data = await query.refetch(...stableArgs);
+          const data = await query.refetch(queryKey, ...stableArgs);
           const now = Date.now();
 
           state = {
@@ -1147,7 +1196,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         );
       },
       refetch: (): Promise<TData | undefined> => {
-        return executeQuery(true);
+        return query.refetch(queryKey, ...stableArgs);
       },
       setData: (data: TData, dataUpdatedMs?: number): void => {
         query.setData(queryKey, data, dataUpdatedMs);
@@ -1156,12 +1205,5 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         query.deleteData(queryKey);
       },
     } satisfies UseQueryResult<TData>;
-  }, [
-    executeQuery,
-    lastNonEmptyData,
-    query,
-    queryKey,
-    queryStateValue,
-    stableArgs,
-  ]);
+  }, [lastNonEmptyData, query, queryKey, queryStateValue, stableArgs]);
 }
