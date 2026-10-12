@@ -770,11 +770,14 @@ function sharedQuery2<TArgs extends unknown[], TData>(
         delete clone.error;
         delete clone.errorUpdatedMs;
 
+        const now = Date.now();
+
         return {
           ...clone,
           data,
           loading: false,
-          lastUpdatedMs: Date.now(),
+          lastUpdatedMs: now,
+          dataUpdatedMs: now,
         };
       });
 
@@ -782,9 +785,14 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     } catch (e) {
       // Mark loading errored.
       if (getQueryValue(queryKey)?.loading) {
-        const now = Date.now();
-
         setQueryValue(queryKey, (old) => {
+          // Remove error if any.
+          const clone = { ...old };
+          delete clone.data;
+          delete clone.dataUpdatedMs;
+
+          const now = Date.now();
+
           return {
             ...old,
             loading: false,
