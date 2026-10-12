@@ -446,7 +446,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
 
             // Since each stored key could contain multiple values, and isValid
             // checks for each value, we need to check every value to make sure
-            // they are valid.
+            // they are valid. Treats cached errors as invalid.
             // Supposed type of v: QueryStateValue<TData>
             for (const v of Object.values(u)) {
               if (
@@ -628,11 +628,11 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     const newState = { ...oldState }; // shallow clone
     let needUpdate = false;
 
-    const deleteKeyIfNotMounted = (key: string, expired: boolean) => {
+    const deleteKeyIfNotMounted = (key: string, expired: boolean): boolean => {
       // Mounted keys cannot be cleaned up as they are visible in the UI.
       if (mountedKeys.has(key)) {
         log(`Cannot clean up ${key} as it is mounted`);
-        return;
+        return false;
       }
 
       const byteSize = getByteSize(key) + getByteSize(newState[key]);
@@ -645,33 +645,34 @@ function sharedQuery2<TArgs extends unknown[], TData>(
 
       delete newState[key];
       needUpdate = true;
+      return true;
     };
 
-    const entriesByDataUpdatedMsAsc = Object.entries(newState).sort(
-      (entry1, entry2) =>
-        (entry1[1].dataUpdatedMs ?? 0) - (entry2[1].dataUpdatedMs ?? 0),
+    // lastUpdatedMs refers to either the dataUpdatedMs or the errorUpdatedMs.
+    const entriesByLastUpdatedMsAsc = Object.fromEntries(
+      Object.entries(newState).sort(
+        (entry1, entry2) => entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
+      ),
     );
 
     // Clean up all expired entries. Note that the auto-expiration in the
     // storage adapter only applies to the entire state, which contains all
     // the different query keys and their values. Each query key has its own
     // timestamp and we need to apply our own expiration here.
-    for (const [key] of entriesByDataUpdatedMsAsc) {
+    for (const key of Object.keys(entriesByLastUpdatedMsAsc)) {
       // Anything after this is not expired yet.
-      if (!isExpired(newState[key]?.dataUpdatedMs ?? 0)) {
+      if (!isExpired(newState[key]?.lastUpdatedMs ?? 0)) {
         break;
       }
 
-      deleteKeyIfNotMounted(key, true);
+      if (deleteKeyIfNotMounted(key, true)) {
+        delete entriesByLastUpdatedMsAsc[key];
+      }
     }
 
     if (numToCut > 0 || bytesToCut > 0) {
-      const entriesByLastUpdatedMsAsc = Object.entries(newState).sort(
-        (entry1, entry2) => entry1[1].lastUpdatedMs - entry2[1].lastUpdatedMs,
-      );
-
       // Clean up starting from oldest entry first.
-      for (const [key] of entriesByLastUpdatedMsAsc) {
+      for (const key of Object.keys(entriesByLastUpdatedMsAsc)) {
         deleteKeyIfNotMounted(key, false);
 
         if (numToCut <= 0 && bytesToCut <= 0) {
