@@ -827,9 +827,13 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     await waitForStateInit(queryKey);
     const cached = getQueryValue(queryKey);
 
-    if (cached?.data !== undefined && !isExpired(cached.dataUpdatedMs ?? 0)) {
+    if (
+      cached?.data !== undefined &&
+      cached.dataUpdatedMs &&
+      !isExpired(cached.dataUpdatedMs)
+    ) {
       // Return cached value if not stale.
-      if (!isStale(cached.dataUpdatedMs ?? 0)) {
+      if (!isStale(cached.dataUpdatedMs)) {
         log(`Return fresh data ${queryKey} from cache without fetching`);
         return cached.data;
       }
