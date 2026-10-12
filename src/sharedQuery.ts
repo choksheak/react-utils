@@ -764,42 +764,28 @@ function sharedQuery2<TArgs extends unknown[], TData>(
       const data = await fetchData();
 
       // Mark loading succeeded.
-      setQueryValue(queryKey, (old) => {
-        // Remove error if any.
-        const clone = { ...old };
-        delete clone.error;
-        delete clone.errorUpdatedMs;
-
+      if (getQueryValue(queryKey)?.loading) {
         const now = Date.now();
 
-        return {
-          ...clone,
+        setQueryValue(queryKey, {
           data,
           loading: false,
           lastUpdatedMs: now,
           dataUpdatedMs: now,
-        };
-      });
+        });
+      }
 
       return data;
     } catch (e) {
       // Mark loading errored.
       if (getQueryValue(queryKey)?.loading) {
-        setQueryValue(queryKey, (old) => {
-          // Remove error if any.
-          const clone = { ...old };
-          delete clone.data;
-          delete clone.dataUpdatedMs;
+        const now = Date.now();
 
-          const now = Date.now();
-
-          return {
-            ...old,
-            loading: false,
-            lastUpdatedMs: now,
-            error: e,
-            errorUpdatedMs: now,
-          };
+        setQueryValue(queryKey, {
+          loading: false,
+          lastUpdatedMs: now,
+          error: e,
+          errorUpdatedMs: now,
         });
       }
 
