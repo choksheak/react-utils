@@ -138,9 +138,16 @@ export type UseQueryResult<TData> = QueryStateValue<TData> &
     abortCurrentQuery: (reason?: unknown) => boolean;
 
     /**
-     * Let the caller get the data immediately no matter what.
+     * Let the caller get the data immediately no matter what. Throws an error
+     * if the fetch fails.
      */
     getCachedOrFetch: () => Promise<TData>;
+
+    /**
+     * Get the cached state or do a new fetch, including errors. Never throws
+     * an error.
+     */
+    getCachedStateOrFetch: () => Promise<QueryStateValue<TData>>;
 
     /**
      * Manually refresh the data by doing a new query.
@@ -793,7 +800,10 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     }
   }
 
-  /** For cached data, we need to return the correct timestamps as well. */
+  /**
+   * If the cached data is updated, don't fetch it. Ignore cached errors.
+   * Throw an error if fetch fails.
+   */
   async function getCachedOrFetch(
     queryKey: string,
     ...args: TArgs
@@ -827,6 +837,74 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     }
 
     return await dedupedFetch(queryKey, "query", ...args);
+  }
+
+  /**
+   * If the cached data or error is updated, then don't attempt a new fetch.
+   * Never throws an error.
+   */
+  async function getCachedStateOrFetch(
+    queryKey: string,
+    ...args: TArgs
+  ): Promise<QueryStateValue<TData>> {
+    // Important: wait for data to be loaded from cache first before trying to
+    // fetch from server. This fixes a bad bug where the data is big, and the
+    // code here starts a server fetch before the cache data loaded.
+    const startMs = Date.now();
+    await queryState.readyPromise;
+    const waitedMs = Date.now() - startMs;
+
+    if (waitedMs) {
+      log(`${queryKey}: Waited for ${waitedMs}ms before state is ready`);
+    }
+
+    const cached = getQueryValue(queryKey);
+
+    if (
+      cached?.data !== undefined &&
+      cached.dataUpdatedMs &&
+      !isExpired(cached.dataUpdatedMs)
+    ) {
+      // Return cached value if not stale.
+      if (!isStale(cached.dataUpdatedMs)) {
+        log(`Return fresh data ${queryKey} from cache without fetching`);
+        return cached;
+      }
+
+      // If stale, update the data in the background.
+      void dedupedFetch(queryKey, "query", ...args);
+
+      // Still return stale data immediately.
+      log(`Returning stale data for ${queryKey}`);
+      return cached;
+    }
+
+    if (
+      cached?.error !== undefined &&
+      cached.errorUpdatedMs &&
+      !isExpired(cached.errorUpdatedMs)
+    ) {
+      // Return cached value if not stale.
+      if (!isStale(cached.errorUpdatedMs)) {
+        log(`Return fresh error ${queryKey} from cache without fetching`);
+        return cached;
+      }
+
+      // If stale, update the data in the background.
+      void dedupedFetch(queryKey, "query", ...args);
+
+      // Still return stale data immediately.
+      log(`Returning stale error for ${queryKey}`);
+      return cached;
+    }
+
+    try {
+      await dedupedFetch(queryKey, "query", ...args);
+    } catch {
+      // ignore errors which will be saved in `state.error`.
+    }
+
+    return getQueryValue(queryKey) ?? DEFAULT_QUERY_STATE_ENTRY;
   }
 
   async function startFetching(
@@ -947,6 +1025,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     setData,
     deleteData,
     getCachedOrFetch,
+    getCachedStateOrFetch,
     fetch,
     refetch,
     clear,
@@ -1054,7 +1133,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     if (initQueryKeyDone.current === queryKey) return;
     initQueryKeyDone.current = queryKey;
 
-    void query.getCachedOrFetch(queryKey, ...stableArgs);
+    void query.getCachedStateOrFetch(queryKey, ...stableArgs);
   }, [query, queryKey, stableArgs]);
 
   return useMemo(() => {
@@ -1079,6 +1158,9 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
       },
       getCachedOrFetch: async (): Promise<TData> => {
         return await query.getCachedOrFetch(queryKey, ...stableArgs);
+      },
+      getCachedStateOrFetch: async (): Promise<QueryStateValue<TData>> => {
+        return await query.getCachedStateOrFetch(queryKey, ...stableArgs);
       },
       refetch: (): Promise<TData | undefined> => {
         return query.refetch(queryKey, ...stableArgs);
