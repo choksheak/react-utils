@@ -84,16 +84,8 @@
  */
 
 import { http, retries } from "@choksheak/ts-utils/http";
-import { nonNil } from "@choksheak/ts-utils/nonNil";
 import getByteSize from "object-sizeof";
-import {
-  SetStateAction,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import XXH from "xxhashjs";
 
 import { sharedState, SharedStateOptions, useSharedState } from "./sharedState";
@@ -761,45 +753,46 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     }
   }
 
-  async function wrapLoading<T>(
+  async function wrapLoading(
     queryKey: string,
-    fn: () => Promise<T>,
-  ): Promise<T> {
+    fetchData: () => Promise<TData>,
+  ): Promise<TData> {
     // Mark loading started.
     if (!getQueryValue(queryKey)?.loading) {
       setQueryValue(queryKey, (old) => ({ ...old, loading: true }));
     }
 
     try {
-      const data = await fn();
+      const data = await fetchData();
 
       // Mark loading succeeded.
-      if (getQueryValue(queryKey)?.loading) {
-        setQueryValue(queryKey, (old) => {
-          // Remove error if any.
-          const clone = { ...old };
-          delete clone.error;
-          delete clone.errorUpdatedMs;
+      setQueryValue(queryKey, (old) => {
+        // Remove error if any.
+        const clone = { ...old };
+        delete clone.error;
+        delete clone.errorUpdatedMs;
 
-          return {
-            ...clone,
-            loading: false,
-            lastUpdatedMs: Date.now(),
-          };
-        });
-      }
+        return {
+          ...clone,
+          data,
+          loading: false,
+          lastUpdatedMs: Date.now(),
+        };
+      });
 
       return data;
     } catch (e) {
       // Mark loading errored.
       if (getQueryValue(queryKey)?.loading) {
+        const now = Date.now();
+
         setQueryValue(queryKey, (old) => {
           return {
             ...old,
             loading: false,
-            lastUpdatedMs: Date.now(),
+            lastUpdatedMs: now,
             error: e,
-            errorUpdatedMs: Date.now(),
+            errorUpdatedMs: now,
           };
         });
       }
@@ -810,8 +803,9 @@ function sharedQuery2<TArgs extends unknown[], TData>(
 
   /** For cached data, we need to return the correct timestamps as well. */
   async function getCachedOrFetch(
+    queryKey: string,
     ...args: TArgs
-  ): Promise<QueryStateValue<TData>> {
+  ): Promise<TData> {
     // Important: wait for data to be loaded from cache first before trying to
     // fetch from server. This fixes a bad bug where the data is big, and the
     // code here starts a server fetch before the cache data loaded.
@@ -819,45 +813,32 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     await queryState.readyPromise;
     const waitedMs = Date.now() - startMs;
 
-    const queryKey = getQueryKey(args);
-    const cached = getQueryValue(queryKey);
-
     if (waitedMs) {
       log(`${queryKey}: Waited for ${waitedMs}ms before data is ready`);
     }
 
-    if (cached?.data && !isExpired(cached.dataUpdatedMs ?? 0)) {
+    const cached = getQueryValue(queryKey);
+
+    if (cached?.data !== undefined && !isExpired(cached.dataUpdatedMs ?? 0)) {
       // Return cached value if not stale.
       if (!isStale(cached.dataUpdatedMs ?? 0)) {
         log(`Return fresh data ${queryKey} from cache without fetching`);
-
-        // Update lastUpdatedMs as the last accessed time.
-        queryState.setValue((prev) => ({
-          ...prev,
-          [queryKey]: { ...cached, lastUpdatedMs: Date.now() },
-        }));
-
-        return cached;
+        return cached.data;
       }
 
       // If stale, update the data in the background.
-      void dedupedFetch(queryKey, "query", ...args);
+      void wrapLoading(queryKey, () =>
+        dedupedFetch(queryKey, "query", ...args),
+      );
 
       // Still return stale data immediately.
       log(`Returning stale data for ${queryKey}`);
-      return cached;
+      return cached.data;
     }
 
-    const data = await dedupedFetch(queryKey, "query", ...args);
-    const now = Date.now();
-
-    return {
-      // Don't keep old error.
-      lastUpdatedMs: now,
-      loading: false,
-      data,
-      dataUpdatedMs: now,
-    };
+    return await wrapLoading(queryKey, () =>
+      dedupedFetch(queryKey, "query", ...args),
+    );
   }
 
   async function startFetching(
@@ -1065,67 +1046,10 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
 
   useEffect(() => {
     if (query.keepLastNonEmptyData && queryStateValue.data !== undefined) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLastNonEmptyData(queryStateValue.data);
     }
   }, [query.keepLastNonEmptyData, queryStateValue.data]);
-
-  // The fetch logic wrapped in useCallback to be stable for useEffect
-  const executeQuery = useCallback(
-    async (isRefetch: boolean): Promise<TData | undefined> => {
-      query.log(
-        `Begin executing shared query ${queryKey}, isRefetch=${isRefetch}`,
-      );
-
-      if (!isMounted.current) return;
-
-      query.setQueryValue(queryKey, (prev) => ({
-        // Keep old data and error.
-        ...prev,
-        lastUpdatedMs: Date.now(),
-        loading: true,
-      }));
-
-      try {
-        let state: QueryStateValue<TData>;
-
-        if (isRefetch) {
-          const data = await query.refetch(queryKey, ...stableArgs);
-          const now = Date.now();
-
-          state = {
-            // Don't keep old error.
-            lastUpdatedMs: now,
-            loading: false,
-            data,
-            dataUpdatedMs: now,
-          };
-        } else {
-          state = await query.getCachedOrFetch(...stableArgs);
-        }
-
-        if (!isMounted.current) return;
-
-        // Make sure to reset loading to false.
-        query.setQueryValue(queryKey, { ...state, loading: false });
-
-        return state.data;
-      } catch (e) {
-        if (!isMounted.current) return;
-
-        const now = Date.now();
-
-        query.setQueryValue(queryKey, (prev) => ({
-          // Keep old data.
-          ...prev,
-          lastUpdatedMs: now,
-          loading: false,
-          error: e,
-          errorUpdatedMs: now,
-        }));
-      }
-    },
-    [query, queryKey, stableArgs],
-  );
 
   // Track mounted state.
   useEffect(() => {
@@ -1144,26 +1068,8 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
     if (initQueryKeyDone.current === queryKey) return;
     initQueryKeyDone.current = queryKey;
 
-    // No need to load the data if it is already present.
-    if (
-      queryStateValue.data !== undefined &&
-      !query.isExpired(queryStateValue.dataUpdatedMs ?? 0)
-    ) {
-      if (query.isStale(queryStateValue.dataUpdatedMs ?? 0)) {
-        query.log(`Auto-refresh stale data for ${queryKey}`);
-        void executeQuery(false);
-      }
-      return;
-    }
-
-    void executeQuery(false);
-  }, [
-    executeQuery,
-    query,
-    queryKey,
-    queryStateValue.data,
-    queryStateValue.dataUpdatedMs,
-  ]);
+    void query.getCachedOrFetch(queryKey, ...stableArgs);
+  }, [query, queryKey, stableArgs]);
 
   return useMemo(() => {
     return {
@@ -1186,14 +1092,7 @@ export function useSharedQuery<TArgs extends unknown[], TData>(
         return Boolean(controller);
       },
       getCachedOrFetch: async (): Promise<TData> => {
-        const data = await query.getCachedOrFetch(...stableArgs);
-
-        return nonNil(
-          data.data,
-          typeof data.error === "string"
-            ? data.error
-            : JSON.stringify(data.error),
-        );
+        return await query.getCachedOrFetch(queryKey, ...stableArgs);
       },
       refetch: (): Promise<TData | undefined> => {
         return query.refetch(queryKey, ...stableArgs);
