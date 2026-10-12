@@ -827,18 +827,14 @@ function sharedQuery2<TArgs extends unknown[], TData>(
       }
 
       // If stale, update the data in the background.
-      void wrapLoading(queryKey, () =>
-        dedupedFetch(queryKey, "query", ...args),
-      );
+      void dedupedFetch(queryKey, "query", ...args);
 
       // Still return stale data immediately.
       log(`Returning stale data for ${queryKey}`);
       return cached.data;
     }
 
-    return await wrapLoading(queryKey, () =>
-      dedupedFetch(queryKey, "query", ...args),
-    );
+    return await dedupedFetch(queryKey, "query", ...args);
   }
 
   async function startFetching(
@@ -882,12 +878,14 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     }
 
     // Fetch new data
-    const promise = startFetching(queryKey, queryType, args);
-    const abortController = new AbortController();
+    return wrapLoading(queryKey, () => {
+      const promise = startFetching(queryKey, queryType, args);
+      const abortController = new AbortController();
 
-    inflightQueries.set(queryKey, { promise, abortController });
+      inflightQueries.set(queryKey, { promise, abortController });
 
-    return promise;
+      return promise;
+    });
   }
 
   /**
@@ -895,9 +893,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
    * another fetch is already inflight.
    */
   async function fetch(queryKey: string, ...args: TArgs): Promise<TData> {
-    return await wrapLoading(queryKey, () =>
-      dedupedFetch(queryKey, "query", ...args),
-    );
+    return await dedupedFetch(queryKey, "query", ...args);
   }
 
   /**
@@ -905,9 +901,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
    * then this would be identical to calling `query.fetch()`.
    */
   async function refetch(queryKey: string, ...args: TArgs): Promise<TData> {
-    return await wrapLoading(queryKey, () =>
-      dedupedFetch(queryKey, "refetch", ...args),
-    );
+    return await dedupedFetch(queryKey, "refetch", ...args);
   }
 
   /** Delete all currently cached data & all inflight promises. */
