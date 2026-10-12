@@ -802,16 +802,11 @@ function sharedQuery2<TArgs extends unknown[], TData>(
   }
 
   /**
-   * If the cached data is updated, don't fetch it. Ignore cached errors.
-   * Throw an error if fetch fails.
+   * Important: wait for data to be loaded from cache first before trying to
+   * fetch from server. This fixes a bad bug where the data is big, and the
+   * code here starts a server fetch before the cache data loaded.
    */
-  async function getCachedOrFetch(
-    queryKey: string,
-    ...args: TArgs
-  ): Promise<TData> {
-    // Important: wait for data to be loaded from cache first before trying to
-    // fetch from server. This fixes a bad bug where the data is big, and the
-    // code here starts a server fetch before the cache data loaded.
+  async function waitForStateInit(queryKey: string) {
     const startMs = Date.now();
     await queryState.readyPromise;
     const waitedMs = Date.now() - startMs;
@@ -819,7 +814,17 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     if (waitedMs) {
       log(`${queryKey}: Waited for ${waitedMs}ms before data is ready`);
     }
+  }
 
+  /**
+   * If the cached data is updated, don't fetch it. Ignore cached errors.
+   * Throw an error if fetch fails.
+   */
+  async function getCachedOrFetch(
+    queryKey: string,
+    ...args: TArgs
+  ): Promise<TData> {
+    await waitForStateInit(queryKey);
     const cached = getQueryValue(queryKey);
 
     if (cached?.data !== undefined && !isExpired(cached.dataUpdatedMs ?? 0)) {
@@ -848,17 +853,7 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     queryKey: string,
     ...args: TArgs
   ): Promise<QueryStateValue<TData>> {
-    // Important: wait for data to be loaded from cache first before trying to
-    // fetch from server. This fixes a bad bug where the data is big, and the
-    // code here starts a server fetch before the cache data loaded.
-    const startMs = Date.now();
-    await queryState.readyPromise;
-    const waitedMs = Date.now() - startMs;
-
-    if (waitedMs) {
-      log(`${queryKey}: Waited for ${waitedMs}ms before state is ready`);
-    }
-
+    await waitForStateInit(queryKey);
     const cached = getQueryValue(queryKey);
 
     if (
