@@ -660,8 +660,15 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     // the different query keys and their values. Each query key has its own
     // timestamp and we need to apply our own expiration here.
     for (const key of Object.keys(entriesByLastUpdatedMsAsc)) {
+      const state = newState[key];
+
+      // Skip current fetches.
+      if (!state?.lastUpdatedMs || state?.loading) {
+        continue;
+      }
+
       // Anything after this is not expired yet.
-      if (!isExpired(newState[key]?.lastUpdatedMs ?? 0)) {
+      if (state?.lastUpdatedMs && !isExpired(state.lastUpdatedMs)) {
         break;
       }
 
@@ -673,6 +680,13 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     if (numToCut > 0 || bytesToCut > 0) {
       // Clean up starting from oldest entry first.
       for (const key of Object.keys(entriesByLastUpdatedMsAsc)) {
+        const state = newState[key];
+
+        // Skip current fetches.
+        if (!state?.lastUpdatedMs || state?.loading) {
+          continue;
+        }
+
         deleteKeyIfNotMounted(key, false);
 
         if (numToCut <= 0 && bytesToCut <= 0) {
