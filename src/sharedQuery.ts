@@ -757,10 +757,8 @@ function sharedQuery2<TArgs extends unknown[], TData>(
     queryKey: string,
     fetchData: () => Promise<TData>,
   ): Promise<TData> {
-    // Mark loading started.
-    if (!getQueryValue(queryKey)?.loading) {
-      setQueryValue(queryKey, (old) => ({ ...old, loading: true }));
-    }
+    // Mark loading started and delete the old data + error.
+    setQueryValue(queryKey, { loading: true, lastUpdatedMs: Date.now() });
 
     try {
       const data = await fetchData();
